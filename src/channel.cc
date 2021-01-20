@@ -13,6 +13,18 @@
 #include "tll/util/ownedmsg.h"
 #include "names.h"
 #include "lws_scheme.h"
+#include "ev-backend.h"
+
+#ifdef __linux__
+#include <sys/timerfd.h>
+#include <unistd.h>
+#endif
+
+#if 0
+#include <uv.h>
+#else
+#include <ev.h>
+#endif
 
 namespace {
 std::optional<std::string_view> tll_lws_http_get_uri(lws * wsi)
@@ -46,6 +58,19 @@ class WSServer : public tll::channel::Base<WSServer>
 	std::vector<lws_protocols> _protocols;
 	lws_context_creation_info _info = {};
 	lws_context * _lws = nullptr;
+	void * _loop_ptr[1] = {};
+
+	int _timerfd = -1;
+
+#if 0
+	uv_loop_t _uv_loop = {};
+	//uv_timer_t _uv_timer = {};
+	uv_poll_t _uv_timer = {};
+
+#else
+	struct ev_loop * _ev_loop = nullptr;
+	struct ev_io _ev_timer = {};
+#endif
 
  public:
 	struct user_t {
@@ -209,6 +234,7 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 
 	_info.protocols = _protocols.data();
 	_info.port = 8080;
+	_info.foreign_loops = _loop_ptr;
 	//_info.options = LWS_SERVER_OPTION_HTTP_HEADERS_SECURITY_BEST_PRACTICES_ENFORCE;
 
 	auto reader = channel_props_reader(url);
@@ -223,8 +249,70 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	return 0;
 }
 
+namespace {
+#if 0
+void poll_cb_uv(uv_poll_t* handle, int status, int events)
+{
+	int64_t buf;
+	auto r = read(handle->io_watcher.fd, &buf, sizeof(buf));
+	(void) r;
+}
+#else
+void poll_cb_ev(struct ev_loop *, ev_io *ev, int)
+{
+	int64_t buf;
+	auto r = read(ev->fd, &buf, sizeof(buf));
+	(void) r;
+}
+#endif
+}
+
+
 int WSServer::_open(const PropsView &s)
 {
+#ifdef __linux__
+	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	if (_timerfd == -1)
+		return _log.fail(EINVAL, "Failed to create timer fd: {}", strerror(errno));
+
+	struct itimerspec its = {};
+	its.it_interval = { 0, 100000000 };
+	its.it_value = { 0, 100000000 };
+	if (timerfd_settime(_timerfd, 0, &its, nullptr))
+		return _log.fail(EINVAL, "Failed to rearm timerfd: {}", strerror(errno));
+#if 0
+	if (uv_loop_init(&_uv_loop))
+		return _log.fail(EINVAL, "Failed to init libuv event loop");
+	auto fd = uv_backend_fd(&_uv_loop);
+
+	uv_poll_init(&_uv_loop, &_uv_timer, _timerfd);
+	uv_poll_start(&_uv_timer, UV_READABLE, poll_cb_uv);
+
+	uv_run(&_uv_loop, UV_RUN_NOWAIT);
+
+	_loop_ptr[0] = &_uv_loop;
+	_info.options |= LWS_SERVER_OPTION_LIBUV;
+#else
+	_ev_loop = ev_loop_new(EVFLAG_NOENV | EVFLAG_NOSIGMASK);
+	if (!_ev_loop)
+		return _log.fail(EINVAL, "Faield to ini libev event loop");
+
+	ev_io_init(&_ev_timer, poll_cb_ev, _timerfd, EV_READ);
+	ev_io_start(_ev_loop, &_ev_timer);
+
+	ev_run(_ev_loop, EVRUN_NOWAIT);
+
+	auto fd = tll_ev_backend_fd(_ev_loop);
+
+	_loop_ptr[0] = _ev_loop;
+	_info.options |= LWS_SERVER_OPTION_LIBEV;
+#endif
+#endif
+	if (fd != -1) {
+		_update_fd(fd);
+		_update_dcaps(dcaps::CPOLLIN);
+	}
+
 	_lws = lws_create_context(&_info);
 	if (!_lws)
 		return _log.fail(EINVAL, "Failed to create LWS context");
@@ -238,6 +326,29 @@ int WSServer::_close()
 		lws_context_destroy(_lws);
 		_lws = nullptr;
 	}
+
+	this->_update_fd(-1);
+
+	if (_timerfd != -1) {
+		::close(_timerfd);
+		_timerfd = -1;
+	}
+
+#if 0
+	uv_close((uv_handle_t *) &_uv_timer, nullptr);
+
+	_log.debug("Close UV loop");
+
+	uv_loop_close(&_uv_loop);
+	for (auto i = 0u; i < 100000 && uv_loop_close(&_uv_loop) == UV_EBUSY; i++)
+		uv_run(&_uv_loop, UV_RUN_ONCE);
+#else
+	if (_ev_loop) {
+		ev_loop_destroy(_ev_loop);
+		_ev_loop = nullptr;
+	}
+#endif
+
 	return 0;
 }
 
@@ -444,7 +555,12 @@ int WSServer::_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, v
 
 int WSServer::_process(long timeout, int flags)
 {
-	auto r = lws_service(_lws, -1);
+	//auto r = lws_service(_lws, -1);
+#if 0
+	auto r = uv_run(&_uv_loop, UV_RUN_NOWAIT);
+#else
+	auto r = ev_run(_ev_loop, EVRUN_NOWAIT);
+#endif
 	if (r < 0)
 		return _log.fail(EINVAL, "LWS process failed: {}", r);
 	return 0;
