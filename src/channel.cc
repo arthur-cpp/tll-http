@@ -370,10 +370,28 @@ int WSHTTP::lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void
 		_disconnected(wsi, user);
 		break;
 
-	case LWS_CALLBACK_HTTP_WRITEABLE:
+	case LWS_CALLBACK_HTTP_WRITEABLE: {
 		if (user->close)
 			return tll_lws_drop(wsi, (http_status) user->close);
-		break;
+
+		unsigned char buf[LWS_PRE + LWS_RECOMMENDED_MIN_HEADER_SPACE];
+		auto start = &buf[LWS_PRE];
+                auto p = start;
+		auto end = &buf[sizeof(buf) - 1];
+
+		if (lws_add_http_common_headers(wsi, HTTP_STATUS_OK, "application/octet-stream", user->pending.size, &p, end))
+			return _log.fail(1, "Failed to set text/event-stream content type");
+
+		if (lws_finalize_write_http_header(wsi, start, &p, end))
+			return _log.fail(1, "Failed to finalize headers");
+
+		if (lws_write(wsi, (unsigned char *) user->pending.data, user->pending.size, LWS_WRITE_HTTP) < (long) user->pending.size)
+			return _log.fail(-1, "Failed to write data");
+
+		user->pending = {};
+
+		return -1;
+	}
 
 	default:
 		break;
@@ -483,7 +501,7 @@ int WSWS::lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *
 
 int WSServer::_lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *_user, void *in, size_t len)
 {
-	_log.trace("Callback {}", lws_callback_name(reason));
+	_log.debug("Callback {}", lws_callback_name(reason));
 	auto user = static_cast<user_t *>(_user);
 
 	switch (reason) {
