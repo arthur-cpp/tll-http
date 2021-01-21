@@ -24,13 +24,13 @@ jobs:
         sudo wget -O/etc/apt/trusted.gpg.d/psha.org.ru.gpg https://psha.org.ru/debian/pubkey.gpg
         sudo apt update
     - name: install deps
-      run: sudo apt install ccache cmake meson pkg-config libfmt-dev libtll-dev libev-dev libwebsockets-dev
+      run: sudo apt install ccache cmake meson pkg-config libfmt-dev libtll-dev libev-dev libwebsockets-dev python3-pytest python3-tll
     - name: configure
       run: meson build
     - name: build
       run: ninja -vC build -j2
-#    - name: test
-#      run: |
-#        meson test -C build --no-rebuild --print-errorlogs -v
+    - name: test
+      run: |
+        meson test -C build --no-rebuild --print-errorlogs -v
 
 # vim: sts=2 sw=2 et
