@@ -14,8 +14,8 @@ lib = shared_library('tll-ws',
 		dependencies : [fmt, lws, tll, libev],
 		install : true)
 
-#test('pytest', import('python').find_installation('python3')
-#	, args: ['-m', 'pytest', '-vx', 'test.py']
-#	, env: 'BUILD_DIR=@0@'.format(meson.current_build_dir())
-#	, workdir: meson.current_source_dir()
-#)
+test('pytest', import('python').find_installation('python3')
+	, args: ['-m', 'pytest', '-vx', 'test.py']
+	, env: 'BUILD_DIR=@0@'.format(meson.current_build_dir())
+	, workdir: meson.current_source_dir()
+)
