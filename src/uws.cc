@@ -242,22 +242,25 @@ int WSServer::_open(const PropsView &s)
 #endif
 
 	_app.reset(new uWS::App());
+	uWS::App::WebSocketBehavior wsopt = {};
+
+	wsopt.compression = uWS::SHARED_COMPRESSOR;
+	wsopt.maxPayloadLength = 16 * 1024;
+	wsopt.idleTimeout = 10;
+	wsopt.maxBackpressure = 1 * 1024 * 1024;
+
+	/* Handlers */
+	wsopt.upgrade = [this](auto *res, auto *req, auto *context) { return this->_ws_upgrade(res, req, context); };
+	wsopt.open = [this](auto *ws) { this->_ws_open(ws); };
+	wsopt.message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) { this->_ws_message(ws, message, opCode); };
+	wsopt.drain = [this](auto *ws) { this->_ws_drain(ws); };
+	wsopt.close = [this](auto *ws, int code, std::string_view message) { this->_ws_close(ws, code, message); };
+
 	_app->get("/*", [this](auto *res, auto *req) { this->_http<Method::GET>(res, req); })
 		.post("/*", [this](auto *res, auto *req) { this->_http<Method::POST>(res, req); })
 		.put("/*", [this](auto *res, auto *req) { this->_http<Method::PUT>(res, req); })
 		.head("/*", [this](auto *res, auto *req) { this->_http<Method::HEAD>(res, req); })
-		.ws<user_t>("/*", {
-			.compression = uWS::SHARED_COMPRESSOR,
-			.maxPayloadLength = 16 * 1024,
-			.idleTimeout = 10,
-			.maxBackpressure = 1 * 1024 * 1024,
-			/* Handlers */
-			.upgrade = [this](auto *res, auto *req, auto *context) { return this->_ws_upgrade(res, req, context); },
-			.open = [this](auto *ws) { this->_ws_open(ws); },
-			.message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) { this->_ws_message(ws, message, opCode); },
-			.drain = [this](auto *ws) { this->_ws_drain(ws); },
-			.close = [this](auto *ws, int code, std::string_view message) { this->_ws_close(ws, code, message); },
-		})
+		.ws<user_t>("/*", std::move(wsopt))
 		.listen(8080, [this](auto *token) {
 			this->_app_socket = token;
 			if (token) {
