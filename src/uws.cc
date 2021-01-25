@@ -41,6 +41,9 @@ class WSServer : public tll::channel::Base<WSServer>
 	uv_loop_t _uv_loop = {};
 	uv_poll_t _uv_timer = {};
 
+	std::string _host;
+	unsigned short _port;
+
  public:
 	struct user_t {
 		WSWS * channel = nullptr;
@@ -194,6 +197,17 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	_scheme_control.reset(context().scheme_load(lws_scheme::scheme));
 	if (!_scheme_control.get())
 		return _log.fail(EINVAL, "Failed to load control scheme");
+
+	auto host = url.host();
+	auto sep = host.find_last_of(':');
+	if (sep == host.npos)
+		return this->_log.fail(EINVAL, "Invalid host:port pair: {}", host);
+	auto p = conv::to_any<unsigned short>(host.substr(sep + 1));
+	if (!p)
+		return this->_log.fail(EINVAL, "Invalid port '{}': {}", host.substr(sep + 1), p.error());
+
+	_port = *p;
+	_host = host.substr(0, sep);
 
 	auto reader = channel_props_reader(url);
 	/*

@@ -13,10 +13,10 @@ from tll.channel import Context
 class Test:
     def setup(self):
         self.ctx = Context()
-        self.ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-ws"), 'channel_module')
+        self.ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uws"), 'channel_module')
         self.loop = asynctll.Loop(context=self.ctx)
 
-        self.server = self.loop.Channel('ws://', name='server')
+        self.server = self.loop.Channel('ws://*:8080', name='server')
         self.thread_event = self.loop.Channel("direct://", name='thread/tll', dump='text')
         self.main_event = self.ctx.Channel("direct://", name='thread/main', master=self.thread_event)
         self.channels = []
