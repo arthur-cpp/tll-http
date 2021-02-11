@@ -10,7 +10,9 @@
 #include <variant>
 
 #include "tll/channel/base.h"
-#include "tll/util/ownedmsg.h"
+#include "tll/util/cppring.h"
+#include "tll/util/size.h"
+
 #include "names.h"
 #include "lws_scheme.h"
 #include "ev-backend.h"
@@ -26,10 +28,11 @@ using namespace tll;
 
 class WSHTTP;
 class WSWS;
+class WSPub;
 
 class WSServer : public tll::channel::Base<WSServer>
 {
-	using node_ptr_t = std::variant<WSHTTP *, WSWS *>;
+	using node_ptr_t = std::variant<WSHTTP *, WSWS *, WSPub *>;
  	std::map<std::string_view, node_ptr_t, std::less<>> _nodes;
 
 	int _timerfd = -1;
@@ -46,7 +49,8 @@ class WSServer : public tll::channel::Base<WSServer>
 
  public:
 	struct user_t {
-		WSWS * channel = nullptr;
+		std::variant<WSWS *, WSPub *> channel;
+		tll::util::DataRing<void>::iterator position; // For pub nodes
 		tll_addr_t addr;
 	};
 
@@ -148,8 +152,6 @@ class WSNode : public tll::channel::Base<T>
 		return 0;
 	}
 
-	tll::util::OwnedMessage copy(const tll_msg_t *msg) { return msg; }
-
 	int _connected(R * resp, std::string_view url, tll_addr_t * addr);
 	int _disconnected(R * resp, tll_addr_t addr);
 
@@ -186,6 +188,108 @@ class WSWS : public WSNode<WSWS, uWS::WebSocket<false, true>>
 		resp->end();
 		_disconnected(nullptr, msg->addr);
 		return 0;
+	}
+};
+
+class WSPub : public WSNode<WSPub, uWS::WebSocket<false, true>>
+{
+ 	tll::util::DataRing<void> _ring;
+ public:
+ 	using Response = uWS::WebSocket<false, true>;
+	using Parent = WSNode<WSPub, Response>;
+
+	static constexpr std::string_view impl_protocol() { return "ws+pub"; }
+
+	int _init(const tll::Channel::Url &url, tll::Channel *master)
+	{
+		if (auto r = Parent::_init(url, master); r)
+			return r;
+
+		auto reader = channel_props_reader(url);
+
+		auto size = reader.getT<size_t>("ring-size", 1024);
+		auto data = reader.getT<tll::util::Size>("data-size", 1024 * 1024);
+
+		if (!reader)
+			return _log.fail(EINVAL, "Invalid url: {}", reader.error());
+
+		_ring.resize(size);
+		_ring.data_resize(data);
+		return 0;
+	}
+
+	int _open(const tll::PropsView &url)
+	{
+		_ring.clear();
+		return Parent::_open(url);
+	}
+
+	int _post_data(Response * resp, const tll_msg_t *msg, int flags)
+	{
+		if (msg->size > _ring.data_capacity() / 2)
+			return _log.fail(EINVAL, "Message size {} is larger then half of buffer: {}", msg->size, _ring.data_capacity());
+		auto last = _ring.end();
+		do {
+			auto r = _ring.push_back(msg->data, msg->size);
+			if (r != nullptr)
+				break;
+			auto first = _ring.begin();
+			_ring.pop_front();
+
+			auto it = _sessions.begin();
+			while (it != _sessions.end()) {
+				auto [addr, ws] = *(it++); // Close will remove element
+				auto user = static_cast<user_t *>(ws->getUserData());
+				_log.info("Session {} is behind data, closing", addr);
+				if (user->position == first)
+					ws->close();
+			}
+		} while (true);
+
+		for (auto &[a, ws] : _sessions) {
+			auto user = static_cast<user_t *>(ws->getUserData());
+			if (user->position == last)
+				writeable(ws, user);
+		}
+		return 0;
+	}
+
+	int _post_control(Response * resp, const tll_msg_t *msg, int flags)
+	{
+		if (msg->msgid != lws_scheme::disconnect::id)
+			return 0;
+		resp->end();
+		_disconnected(nullptr, msg->addr);
+		return 0;
+	}
+
+	int _post(const tll_msg_t *msg, int flags)
+	{
+		if (msg->type == TLL_MESSAGE_DATA)
+			return _post_data(nullptr, msg, flags);
+		return Parent::_post(msg, flags);
+	}
+
+	int _connected(Response * ws, std::string_view url, tll_addr_t * addr)
+	{
+		auto user = static_cast<user_t *>(ws->getUserData());
+		user->position = _ring.end();
+
+		return Parent::_connected(ws, url, addr);
+	}
+
+	void writeable(Response * ws, user_t * user)
+	{
+		if (ws->getBufferedAmount() > 0)
+			return;
+		if (user->position == _ring.end())
+			return;
+
+		_log.debug("Post data to {}", user->addr.u64);
+		auto data = std::string_view((const char *) user->position->data(), user->position->size);
+		user->position++;
+
+		ws->send(data);
 	}
 };
 
@@ -275,7 +379,7 @@ int WSServer::_open(const PropsView &s)
 		.put("/*", [this](auto *res, auto *req) { this->_http<Method::PUT>(res, req); })
 		.head("/*", [this](auto *res, auto *req) { this->_http<Method::HEAD>(res, req); })
 		.ws<user_t>("/*", std::move(wsopt))
-		.listen(8080, [this](auto *token) {
+		.listen(_port, [this](auto *token) {
 			this->_app_socket = token;
 			if (token) {
 				this->_log.info("Serving");
@@ -334,7 +438,7 @@ template <typename T, typename R>
 int WSNode<T, R>::_init(const Channel::Url &url, Channel * master)
 {
 	if (!master)
-		return this->_log.fail(EINVAL, "LWS node channel needs master");
+		return this->_log.fail(EINVAL, "WS node channel needs master");
 
 	_master = channel_cast<WSServer>(master);
 	if (!_master)
@@ -397,9 +501,11 @@ int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr)
 template <typename T, typename R>
 int WSNode<T, R>::_disconnected(R * resp, tll_addr_t addr)
 {
-	auto it = _sessions.find(addr.u64);
-	if (it != _sessions.end())
-		_sessions.erase(it);
+	if (this->state() != tll::state::Closing) {
+		auto it = _sessions.find(addr.u64);
+		if (it != _sessions.end())
+			_sessions.erase(it);
+	}
 
 	lws_scheme::disconnect data = {};
 	tll_msg_t msg = {};
@@ -466,13 +572,19 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 		return resp->end("Requested url not found");
 	}
 
-	if (!std::holds_alternative<WSWS *>(it->second)) {
+	std::variant<WSWS *, WSPub *> channel;
+
+	if (std::holds_alternative<WSHTTP *>(it->second)) {
 		_log.debug("WS request to HTTP endpoint {}", uri);
 		resp->writeStatus("400 Bad Request");
 		return resp->end("HTTP node");
+	} else if (std::holds_alternative<WSWS *>(it->second)) {
+		channel = std::get<WSWS *>(it->second);
+	} else if (std::holds_alternative<WSPub *>(it->second)) {
+		channel = std::get<WSPub *>(it->second);
 	}
 
-	resp->template upgrade<user_t>({ std::get<WSWS *>(it->second) }
+	resp->template upgrade<user_t>({ channel }
 		, req->getHeader("sec-websocket-key")
 		, req->getHeader("sec-websocket-protocol")
 		, req->getHeader("sec-websocket-extensions")
@@ -483,32 +595,40 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 void WSServer::_ws_open(uWS::WebSocket<false, true> *ws)
 {
 	auto user = static_cast<user_t *>(ws->getUserData());
-	user->channel->_connected(ws, "", &user->addr);
+	std::visit([&ws, &user](auto && c) { c->_connected(ws, "", &user->addr); }, user->channel);
 }
 
 void WSServer::_ws_message(uWS::WebSocket<false, true> *ws, std::string_view message, uWS::OpCode)
 {
 	auto user = static_cast<user_t *>(ws->getUserData());
+
+	if (!std::holds_alternative<WSWS *>(user->channel))
+		return;
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_DATA;
 	msg.addr = user->addr;
 	msg.data = message.data();
 	msg.size = message.size();
-	user->channel->_callback_data(&msg);
+	std::get<WSWS *>(user->channel)->_callback_data(&msg);
 }
 
 void WSServer::_ws_drain(uWS::WebSocket<false, true> *ws)
 {
+	auto user = static_cast<user_t *>(ws->getUserData());
+
+	if (std::holds_alternative<WSPub *>(user->channel))
+		return std::get<WSPub *>(user->channel)->writeable(ws, user);
 }
 
 void WSServer::_ws_close(uWS::WebSocket<false, true> *ws, int code, std::string_view message)
 {
 	auto user = static_cast<user_t *>(ws->getUserData());
-	user->channel->_disconnected(nullptr, user->addr);
+	std::visit([&user](auto && c) { c->_disconnected(nullptr, user->addr); }, user->channel);
 }
 
 TLL_DEFINE_IMPL(WSServer);
 TLL_DEFINE_IMPL(WSHTTP);
 TLL_DEFINE_IMPL(WSWS);
+TLL_DEFINE_IMPL(WSPub);
 
-auto channel_module = tll::make_channel_module<WSServer, WSHTTP, WSWS>();
+auto channel_module = tll::make_channel_module<WSServer, WSHTTP, WSWS, WSPub>();
