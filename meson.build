@@ -10,7 +10,7 @@ include = [include_directories('src')]
 tll = dependency('tll')
 fmt = dependency('fmt')
 lws = dependency('libwebsockets')
-curl = dependency('libcurl', version: '>=7.63', required: false)
+curl = dependency('libcurl', version: '>=7.63', required: false, disabler: true)
 libuv = dependency('libuv')
 libev = meson.get_compiler('c').find_library('ev')
 

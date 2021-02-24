@@ -14,7 +14,10 @@ import socketserver
 
 def context():
     ctx = C.Context()
-    ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-curl"), 'channel_module')
+    try:
+        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-curl"), 'channel_module')
+    except:
+        pytest.skip("curl:// channel not available")
     return ctx
 
 class EchoHandler(http.server.BaseHTTPRequestHandler):
