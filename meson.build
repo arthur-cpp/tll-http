@@ -10,6 +10,7 @@ include = [include_directories('src')]
 tll = dependency('tll')
 fmt = dependency('fmt')
 lws = dependency('libwebsockets')
+curl = dependency('libcurl', version: '>=7.63', required: false)
 libuv = dependency('libuv')
 libev = meson.get_compiler('c').find_library('ev')
 
@@ -26,6 +27,13 @@ uws = shared_library('tll-uws',
 		['src/uws.cc'],
 		include_directories : include,
 		dependencies : [fmt, tll, libuv, uwebsockets],
+		install : true
+)
+
+uws = shared_library('tll-curl',
+		['src/curl.cc'],
+		include_directories : include,
+		dependencies : [fmt, tll, curl],
 		install : true
 )
 
