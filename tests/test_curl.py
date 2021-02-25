@@ -6,12 +6,14 @@ import tll.channel as C
 from tll.error import TLLError
 from tll.test_util import ports
 
+import decorator
 import http.server
 import os
 import pytest
 import socket
 import socketserver
 
+@pytest.fixture
 def context():
     ctx = C.Context()
     try:
@@ -19,6 +21,13 @@ def context():
     except:
         pytest.skip("curl:// channel not available")
     return ctx
+
+@pytest.fixture
+def asyncloop(context):
+    loop = asynctll.Loop(context)
+    yield loop
+    loop.destroy()
+    loop = None
 
 class EchoHandler(http.server.BaseHTTPRequestHandler):
     def version_string(self): return 'EchoServer/1.0'
@@ -64,147 +73,139 @@ class HTTPServer(socketserver.TCPServer):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
 
-#@pytest.mark.skipif(not C.Context().has_impl('curl'), reason="curl:// channels not supported")
-class Test:
-    def setup(self):
-        self.ctx = context()
-        self.loop = asynctll.Loop(context=self.ctx)
+@pytest.fixture
+def port():
+    return ports.TCP6
 
-    def teardown(self):
-        self.loop.stop = 1
-        self.loop = None
+@pytest.fixture
+def httpd(port):
+    with HTTPServer(('::1', port), EchoHandler) as httpd:
+        yield httpd
 
-        self.ctx = None
+@decorator.decorator
+def asyncloop_run(f, asyncloop, *a, **kw):
+    asyncloop.run(f(asyncloop, *a, **kw))
 
-    async def async_test_autoclose(self):
-        with HTTPServer(('::1', ports.TCP6), EchoHandler) as httpd:
-            c = self.loop.Channel('curl+http://[::1]:{}/some/path'.format(ports.TCP6), autoclose='yes', dump='text', name='http')
-            c.open()
+@asyncloop_run
+async def test_autoclose(asyncloop, port, httpd):
+    c = asyncloop.Channel('curl+http://[::1]:{}/some/path'.format(port), autoclose='yes', dump='text', name='http')
+    c.open()
 
-            await self.loop.sleep(0.01)
+    await asyncloop.sleep(0.01)
 
-            httpd.handle_request()
+    httpd.handle_request()
 
-            m = await c.recv()
-            assert m.type == m.Type.Control
-            assert c.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{ports.TCP6}/some/path', 'size': -1}
+    m = await c.recv()
+    assert m.type == m.Type.Control
+    assert c.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{port}/some/path', 'size': -1}
 
-            m = await c.recv()
-            assert m.data.tobytes() == b'GET /some/path'
+    m = await c.recv()
+    assert m.data.tobytes() == b'GET /some/path'
 
-            await self.loop.sleep(0.001)
-            assert c.state == c.State.Closed
+    await asyncloop.sleep(0.001)
+    assert c.state == c.State.Closed
 
-    def test_autoclose(self):
-        self.loop.run(self.async_test_autoclose())
+@asyncloop_run
+async def test_autoclose_many(asyncloop, port, httpd):
+    multi = asyncloop.Channel('curl://', name='multi')
+    multi.open()
 
-    async def async_test_autoclose_many(self):
-        with HTTPServer(('::1', ports.TCP6), EchoHandler) as httpd:
-            multi = self.loop.Channel('curl://', name='multi')
-            multi.open()
+    c0 = asyncloop.Channel('curl+http://[::1]:{}/c0'.format(port), autoclose='yes', dump='text', name='c0', master=multi)
+    c0.open()
 
-            c0 = self.loop.Channel('curl+http://[::1]:{}/c0'.format(ports.TCP6), autoclose='yes', dump='text', name='c0', master=multi)
-            c0.open()
+    c1 = asyncloop.Channel('curl+http://[::1]:{}/c1'.format(port), autoclose='yes', dump='text', name='c1', master=multi, method='POST')
+    c1.open()
 
-            c1 = self.loop.Channel('curl+http://[::1]:{}/c1'.format(ports.TCP6), autoclose='yes', dump='text', name='c1', master=multi, method='POST')
-            c1.open()
+    await asyncloop.sleep(0.01)
 
-            await self.loop.sleep(0.01)
+    httpd.handle_request()
 
-            httpd.handle_request()
+    m = await c0.recv()
+    assert m.type == m.Type.Control
+    assert c0.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{port}/c0', 'size': -1}
 
-            m = await c0.recv()
-            assert m.type == m.Type.Control
-            assert c0.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{ports.TCP6}/c0', 'size': -1}
+    m = await c0.recv(0.11)
+    assert m.data.tobytes() == b'GET /c0'
 
-            m = await c0.recv(0.11)
-            assert m.data.tobytes() == b'GET /c0'
+    httpd.handle_request()
 
-            httpd.handle_request()
+    m = await c1.recv()
+    assert m.type == m.Type.Control
+    assert c1.unpack(m).as_dict() == {
+        'code': 500,
+        'method': -1,
+        'size': 10,
+        'headers': [{'header': 'content-length', 'value': '10'}] + HEADERS,
+        'path': f'http://[::1]:{port}/c1',
+    }
 
-            m = await c1.recv()
-            assert m.type == m.Type.Control
-            assert c1.unpack(m).as_dict() == {
-                'code': 500,
-                'method': -1,
-                'size': 10,
-                'headers': [{'header': 'content-length', 'value': '10'}] + HEADERS,
-                'path': f'http://[::1]:{ports.TCP6}/c1',
-            }
+    m = await c1.recv(0.12)
+    assert m.data.tobytes() == b'POST /c1 :'
 
-            m = await c1.recv(0.12)
-            assert m.data.tobytes() == b'POST /c1 :'
+    await asyncloop.sleep(0.001)
+    assert c0.state == c0.State.Closed
+    assert c1.state == c1.State.Closed
 
-            await self.loop.sleep(0.001)
-            assert c0.state == c0.State.Closed
-            assert c1.state == c1.State.Closed
+@asyncloop_run
+async def test_data(asyncloop, port, httpd):
+    c = asyncloop.Channel('curl+http://[::1]:{}/post'.format(port), dump='text', name='post', transfer='data', method='POST', **{'expect-timeout': '1000ms', 'header.Expect':'', 'header.X-Test-Header': 'value'})
+    c.open()
 
-    def test_autoclose_many(self):
-        self.loop.run(self.async_test_autoclose_many())
+    await asyncloop.sleep(0.01)
 
-    async def async_test_data(self):
-        with HTTPServer(('::1', ports.TCP6), EchoHandler) as httpd:
-            c = self.loop.Channel('curl+http://[::1]:{}/post'.format(ports.TCP6), dump='text', name='post', transfer='data', method='POST', **{'expect-timeout': '1000ms', 'header.Expect':'', 'header.X-Test-Header': 'value'})
-            c.open()
+    httpd.handle_request()
 
-            await self.loop.sleep(0.01)
+    with pytest.raises(TimeoutError): await c.recv(0.01)
 
-            httpd.handle_request()
+    for data in [b'xxx', b'zzzz']:
+        c.post(data)
 
-            with pytest.raises(TimeoutError): await c.recv(0.01)
+        await asyncloop.sleep(0.01)
 
-            for data in [b'xxx', b'zzzz']:
-                c.post(data)
+        httpd.handle_request()
 
-                await self.loop.sleep(0.01)
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == 0
+        assert c.unpack(m).as_dict() == {
+            'code': 500,
+            'method': -1,
+            'size': 12 + len(data),
+            'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
+            'path': f'http://[::1]:{port}/post',
+        }
 
-                httpd.handle_request()
+        m = await c.recv(0.02)
+        assert m.addr == 0
+        assert m.data.tobytes() == b'POST /post :' + data
 
-                m = await c.recv(0.01)
-                assert m.type == m.Type.Control
-                assert m.addr == 0
-                assert c.unpack(m).as_dict() == {
-                    'code': 500,
-                    'method': -1,
-                    'size': 12 + len(data),
-                    'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
-                    'path': f'http://[::1]:{ports.TCP6}/post',
-                }
+        await asyncloop.sleep(0.001)
 
-                m = await c.recv(0.12)
-                assert m.addr == 0
-                assert m.data.tobytes() == b'POST /post :' + data
+        assert c.state == c.State.Active
 
-                await self.loop.sleep(0.001)
+    for addr, data in enumerate([b'xxx', b'zzzz']):
+        c.post(data, addr=addr)
 
-                assert c.state == c.State.Active
+    for addr, data in enumerate([b'xxx', b'zzzz']):
+        await asyncloop.sleep(0.01)
 
-            for addr, data in enumerate([b'xxx', b'zzzz']):
-                c.post(data, addr=addr)
+        httpd.handle_request()
 
-            for addr, data in enumerate([b'xxx', b'zzzz']):
-                await self.loop.sleep(0.01)
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == addr
+        assert c.unpack(m).as_dict() == {
+            'code': 500,
+            'method': -1,
+            'size': 12 + len(data),
+            'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
+            'path': f'http://[::1]:{port}/post',
+        }
 
-                httpd.handle_request()
+        m = await c.recv(0.02)
+        assert m.addr == addr
+        assert m.data.tobytes() == b'POST /post :' + data
 
-                m = await c.recv(0.01)
-                assert m.type == m.Type.Control
-                assert m.addr == addr
-                assert c.unpack(m).as_dict() == {
-                    'code': 500,
-                    'method': -1,
-                    'size': 12 + len(data),
-                    'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
-                    'path': f'http://[::1]:{ports.TCP6}/post',
-                }
+        await asyncloop.sleep(0.001)
 
-                m = await c.recv(0.12)
-                assert m.addr == addr
-                assert m.data.tobytes() == b'POST /post :' + data
-
-                await self.loop.sleep(0.001)
-
-                assert c.state == c.State.Active
-
-    def test_test_data(self):
-        self.loop.run(self.async_test_data())
+        assert c.state == c.State.Active
