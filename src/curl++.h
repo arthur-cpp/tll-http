@@ -16,9 +16,13 @@
 
 namespace tll::curl {
 
-using CURL_ptr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
-using CURLM_ptr = std::unique_ptr<CURLM, decltype(&curl_multi_cleanup)>;
-using CURLU_ptr = std::unique_ptr<CURLU, decltype(&curl_url_cleanup)>;
+struct CURL_delete { void operator ()(CURL *ptr) const { curl_easy_cleanup(ptr); } };
+struct CURLM_delete { void operator ()(CURLM *ptr) const { curl_multi_cleanup(ptr); } };
+struct CURLU_delete { void operator ()(CURLU *ptr) const { curl_url_cleanup(ptr); } };
+
+using CURL_ptr = std::unique_ptr<CURL, CURL_delete>;
+using CURLM_ptr = std::unique_ptr<CURLM, CURLM_delete>;
+using CURLU_ptr = std::unique_ptr<CURLU, CURLU_delete>;
 
 namespace {
 template <CURLoption option> struct _curlopt {};

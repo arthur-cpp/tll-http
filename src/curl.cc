@@ -23,7 +23,7 @@ class ChCURLSocket;
 
 class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 {
-	CURLM * _multi = nullptr;
+	tll::curl::CURLM_ptr _multi;
 
 	std::unique_ptr<tll::Channel> _timer;
 	std::list<std::unique_ptr<tll::Channel>> _sockets;
@@ -40,7 +40,7 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 
 	int _process(long timeout, int flags);
 
-	CURLM * multi() { return _multi; }
+	CURLM * multi() { return _multi.get(); }
 
  private:
 
@@ -135,27 +135,29 @@ int ChCURLMulti::_open(const PropsView &url)
 	if (_timer->open())
 		return _log.fail(EINVAL, "Failed to open timer");
 
-	_multi = curl_multi_init();
+	_multi.reset(curl_multi_init());
 	if (!_multi)
 		return _log.fail(EINVAL, "Failed to init curl multi handle");
 
+	auto multi = _multi.get();
+
 	// CURLMOPT_PIPELINING is set by default on recent versions of libcurl
 
-	tll::curl::setopt<CURLMOPT_SOCKETDATA>(_multi, this);
-	tll::curl::setopt<CURLMOPT_SOCKETFUNCTION>(_multi, [](CURL *e, curl_socket_t s, int what, void *user, void *sockp) {
+	tll::curl::setopt<CURLMOPT_SOCKETDATA>(multi, this);
+	tll::curl::setopt<CURLMOPT_SOCKETFUNCTION>(multi, [](CURL *e, curl_socket_t s, int what, void *user, void *sockp) {
 		return static_cast<ChCURLMulti *>(user)->_curl_socket_cb(e, s, what, static_cast<ChCURLSocket *>(sockp));
 	});
 
 	/*
-	tll::curl::setopt<CURLMOPT_TIMERDATA>(_multi, this);
-	tll::curl::setopt<CURLMOPT_TIMERFUNCTION>(_multi, [](CURLM * multi, long ms, void *user) {
+	tll::curl::setopt<CURLMOPT_TIMERDATA>(multi, this);
+	tll::curl::setopt<CURLMOPT_TIMERFUNCTION>(multi, [](CURLM * multi, long ms, void *user) {
 		return static_cast<ChCURLMulti *>(user)->_curl_timer_cb(multi, std::chrono::milliseconds(ms));
 	});
 	*/
 
 	// XXX: This code is left as demo of lambda as function argument. Note + before lambda!
-	curl_multi_setopt(_multi, CURLMOPT_TIMERDATA, this);
-	curl_multi_setopt(_multi, CURLMOPT_TIMERFUNCTION, +[](CURLM * multi, long ms, void *user) {
+	curl_multi_setopt(multi, CURLMOPT_TIMERDATA, this);
+	curl_multi_setopt(multi, CURLMOPT_TIMERFUNCTION, +[](CURLM * multi, long ms, void *user) {
 			return static_cast<ChCURLMulti *>(user)->_curl_timer_cb(multi, std::chrono::milliseconds(ms));
 	});
 
@@ -167,10 +169,7 @@ int ChCURLMulti::_close()
 	// TODO: Can not be called from curl callback
 	_sockets.clear();
 
-	if (_multi) {
-		curl_multi_cleanup(_multi);
-		_multi = nullptr;
-	}
+	_multi.reset();
 
 	_timer->close();
 
@@ -193,7 +192,7 @@ int ChCURLMulti::_process(long timeout, int flags)
 	int remaining = 0;
 	_log.debug("Check for curl info messages");
 	do {
-		auto msg = curl_multi_info_read(_multi, &remaining);
+		auto msg = curl_multi_info_read(_multi.get(), &remaining);
 		if (!msg) break;
 		_log.debug("Got curl info message {}", msg->msg);
 		if (msg->msg == CURLMSG_DONE) {
@@ -215,7 +214,7 @@ int ChCURLMulti::_process(long timeout, int flags)
 int ChCURLMulti::_timer_cb()
 {
 	int running = 0;
-	if (auto r = curl_multi_socket_action(_multi, CURL_SOCKET_TIMEOUT, 0, &running); r)
+	if (auto r = curl_multi_socket_action(_multi.get(), CURL_SOCKET_TIMEOUT, 0, &running); r)
 		_log.warning("curl_multi_socket_action(timer) failed: {}", curl_multi_strerror(r));
 	return 0;
 }
@@ -325,7 +324,7 @@ int ChCURLMulti::_curl_socket_cb(CURL *e, curl_socket_t fd, int what, ChCURLSock
 
 		_sockets.emplace_back(r.release());
 
-		curl_multi_assign(_multi, fd, c);
+		curl_multi_assign(_multi.get(), fd, c);
 	}
 
 	unsigned caps = 0;
