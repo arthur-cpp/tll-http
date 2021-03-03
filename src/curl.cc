@@ -86,7 +86,7 @@ TLL_DEFINE_IMPL(ChCURL);
 TLL_DEFINE_IMPL(ChCURLMulti);
 TLL_DEFINE_IMPL(ChCURLSocket);
 
-tll_channel_impl_t * ChCURL::_init_replace(const Channel::Url &url)
+std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::Url &url, tll::Channel * master)
 {
 	auto proto = url.proto();
 	auto sep = proto.find("+");

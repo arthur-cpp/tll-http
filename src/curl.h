@@ -93,7 +93,7 @@ class ChCURL : public tll::channel::Base<ChCURL>
 
 	~ChCURL() { _free(); }
 
-	tll_channel_impl_t * _init_replace(const tll::Channel::Url &url);
+	std::optional<const tll_channel_impl_t *> _init_replace(const tll::Channel::Url &url, tll::Channel * master);
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::PropsView &);
 	int _close();
