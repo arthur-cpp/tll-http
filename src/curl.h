@@ -86,8 +86,7 @@ class ChCURL : public tll::channel::Base<ChCURL>
 	enum class Mode { Single, Data, Full } _mode = Mode::Single;
 
  public:
-	static constexpr std::string_view param_prefix() { return "curl"; }
-	static constexpr bool impl_prefix_channel() { return true; }
+	static constexpr std::string_view channel_protocol() { return "curl+"; }
 
 	static constexpr auto process_policy() { return ProcessPolicy::Custom; }
 

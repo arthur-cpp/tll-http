@@ -54,7 +54,7 @@ class WSServer : public tll::channel::Base<WSServer>
 		tll_addr_t addr;
 	};
 
-	static constexpr std::string_view param_prefix() { return "ws"; }
+	static constexpr std::string_view channel_protocol() { return "ws"; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::PropsView &);
@@ -69,7 +69,7 @@ class WSServer : public tll::channel::Base<WSServer>
 		auto it = _nodes.find(prefix);
 		if (it != _nodes.end())
 			return EEXIST;
-		_log.info("Add new {} node {} at {}", T::impl_protocol(), ptr->name, prefix);
+		_log.info("Add new {} node {} at {}", T::channel_protocol(), ptr->name, prefix);
 		_nodes.emplace(prefix, ptr);
 		return 0;
 	}
@@ -165,7 +165,7 @@ class WSNode : public tll::channel::Base<T>
 class WSHTTP : public WSNode<WSHTTP>
 {
  public:
-	static constexpr std::string_view impl_protocol() { return "ws+http"; }
+	static constexpr std::string_view channel_protocol() { return "ws+http"; }
 };
 
 class WSWS : public WSNode<WSWS, uWS::WebSocket<false, true>>
@@ -173,7 +173,7 @@ class WSWS : public WSNode<WSWS, uWS::WebSocket<false, true>>
  public:
  	using Response = uWS::WebSocket<false, true>;
 
-	static constexpr std::string_view impl_protocol() { return "ws+ws"; }
+	static constexpr std::string_view channel_protocol() { return "ws+ws"; }
 
 	int _post_data(Response * resp, const tll_msg_t *msg, int flags)
 	{
@@ -198,7 +198,7 @@ class WSPub : public WSNode<WSPub, uWS::WebSocket<false, true>>
  	using Response = uWS::WebSocket<false, true>;
 	using Parent = WSNode<WSPub, Response>;
 
-	static constexpr std::string_view impl_protocol() { return "ws+pub"; }
+	static constexpr std::string_view channel_protocol() { return "ws+pub"; }
 
 	int _init(const tll::Channel::Url &url, tll::Channel *master)
 	{

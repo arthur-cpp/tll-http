@@ -80,7 +80,7 @@ class WSServer : public tll::channel::Base<WSServer>
 		tll::util::OwnedMessage pending;
 	};
 
-	static constexpr std::string_view param_prefix() { return "ws"; }
+	static constexpr std::string_view channel_protocol() { return "ws"; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::PropsView &);
@@ -95,7 +95,7 @@ class WSServer : public tll::channel::Base<WSServer>
 		auto it = _nodes.find(prefix);
 		if (it != _nodes.end())
 			return EEXIST;
-		_log.info("Add new {} node {} at {}", T::impl_protocol(), ptr->name, prefix);
+		_log.info("Add new {} node {} at {}", T::channel_protocol(), ptr->name, prefix);
 		_nodes.emplace(prefix, ptr);
 		return 0;
 	}
@@ -175,7 +175,7 @@ class WSNode : public tll::channel::Base<T>
 class WSHTTP : public WSNode<WSHTTP>
 {
  public:
-	static constexpr std::string_view impl_protocol() { return "ws+http"; }
+	static constexpr std::string_view channel_protocol() { return "ws+http"; }
 
 	int lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len);
 };
@@ -183,7 +183,7 @@ class WSHTTP : public WSNode<WSHTTP>
 class WSSSE : public WSNode<WSSSE>
 {
  public:
-	static constexpr std::string_view impl_protocol() { return "ws+sse"; }
+	static constexpr std::string_view channel_protocol() { return "ws+sse"; }
 
 	int lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len);
 
@@ -205,7 +205,7 @@ class WSSSE : public WSNode<WSSSE>
 class WSWS : public WSNode<WSWS>
 {
  public:
-	static constexpr std::string_view impl_protocol() { return "ws+ws"; }
+	static constexpr std::string_view channel_protocol() { return "ws+ws"; }
 
 	int lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len);
 

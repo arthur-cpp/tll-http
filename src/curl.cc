@@ -29,7 +29,7 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	std::list<std::unique_ptr<tll::Channel>> _sockets;
 
  public:
-	static constexpr std::string_view param_prefix() { return "curl"; }
+	static constexpr std::string_view channel_protocol() { return "curl"; }
 
 	static constexpr auto process_policy() { return ProcessPolicy::Never; }
 
@@ -54,8 +54,7 @@ class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
  	ChCURLMulti * _master = nullptr;
 
  public:
-	static constexpr std::string_view param_prefix() { return "curl"; }
-	static constexpr std::string_view impl_protocol() { return "curl-socket"; } // Only visible in logs
+	static constexpr std::string_view channel_protocol() { return "curl-socket"; } // Only visible in logs
 
 	int _init(const tll::Channel::Url &url, tll::Channel *master)
 	{
@@ -802,4 +801,4 @@ void curl_session_t::close()
 	curl = nullptr;
 }
 
-auto channel_module = tll::make_channel_module<ChCURL>();
+auto channel_module = tll::make_channel_module<ChCURL, ChCURLMulti>();
