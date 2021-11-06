@@ -39,6 +39,7 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	void _free();
 
 	int _process(long timeout, int flags);
+	void _curl_process();
 
 	CURLM * multi() { return _multi.get(); }
 
@@ -77,7 +78,8 @@ class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
 		int events = 0;
 		if (auto r = curl_multi_socket_action(_master->multi(), fd(), events, &running); r)
 			_log.warning("curl_multi_socket_action({}) failed: {}", fd(), curl_multi_strerror(r));
-		return _master->_process(timeout, flags);
+		_master->_curl_process();
+		return EAGAIN;
 	}
 };
 
@@ -85,7 +87,7 @@ TLL_DEFINE_IMPL(ChCURL);
 TLL_DEFINE_IMPL(ChCURLMulti);
 TLL_DEFINE_IMPL(ChCURLSocket);
 
-std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::Url &url, tll::Channel * master)
+	std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::Url &url, tll::Channel * master)
 {
 	auto proto = url.proto();
 	auto sep = proto.find("+");
@@ -188,8 +190,22 @@ void ChCURLMulti::_free()
 
 int ChCURLMulti::_process(long timeout, int flags)
 {
-	int remaining = 0;
 	_log.debug("Check for curl info messages");
+	for (auto i = _sockets.begin(); i != _sockets.end(); ) {
+		if ((*i)->state() == tll::state::Closed) {
+			_log.debug("Cleanup closed socket {}", (*i)->name());
+			i = _sockets.erase(i);
+		} else
+			i++;
+	}
+
+	_update_dcaps(0, dcaps::Pending | dcaps::Process);
+	return EAGAIN;
+}
+
+void ChCURLMulti::_curl_process()
+{
+	int remaining = 0;
 	do {
 		auto msg = curl_multi_info_read(_multi.get(), &remaining);
 		if (!msg) break;
@@ -207,7 +223,6 @@ int ChCURLMulti::_process(long timeout, int flags)
 			session->finalize(msg->data.result);
 		}
 	} while (true);
-	return EAGAIN;
 }
 
 int ChCURLMulti::_timer_cb()
@@ -303,10 +318,7 @@ int ChCURLMulti::_curl_socket_cb(CURL *e, curl_socket_t fd, int what, ChCURLSock
 		_log.debug("Remove curl socket channel {}", channel->name());
 		channel->close();
 		_child_del(channel);
-
-		auto it = std::find_if(_sockets.begin(), _sockets.end(), [channel](auto & i) { return i.get() == channel; });
-		if (it != _sockets.end())
-			_sockets.erase(it);
+		_update_dcaps(dcaps::Pending | dcaps::Process);
 		return 0;
 	}
 
