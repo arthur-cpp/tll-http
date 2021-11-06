@@ -86,6 +86,9 @@ def httpd(port):
 def asyncloop_run(f, asyncloop, *a, **kw):
     asyncloop.run(f(asyncloop, *a, **kw))
 
+def UNDEFINED(c):
+    return c.scheme_control.enums['method_t'].klass.UNDEFINED
+
 @asyncloop_run
 async def test_autoclose(asyncloop, port, httpd):
     c = asyncloop.Channel('curl+http://[::1]:{}/some/path'.format(port), autoclose='yes', dump='text', name='http')
@@ -97,7 +100,7 @@ async def test_autoclose(asyncloop, port, httpd):
 
     m = await c.recv()
     assert m.type == m.Type.Control
-    assert c.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{port}/some/path', 'size': -1}
+    assert c.unpack(m).as_dict() == {'code': 200, 'method': UNDEFINED(c), 'headers': HEADERS, 'path': f'http://[::1]:{port}/some/path', 'size': -1}
 
     m = await c.recv()
     assert m.data.tobytes() == b'GET /some/path'
@@ -122,7 +125,7 @@ async def test_autoclose_many(asyncloop, port, httpd):
 
     m = await c0.recv()
     assert m.type == m.Type.Control
-    assert c0.unpack(m).as_dict() == {'code': 200, 'method': -1, 'headers': HEADERS, 'path': f'http://[::1]:{port}/c0', 'size': -1}
+    assert c0.unpack(m).as_dict() == {'code': 200, 'method': UNDEFINED(c0), 'headers': HEADERS, 'path': f'http://[::1]:{port}/c0', 'size': -1}
 
     m = await c0.recv(0.11)
     assert m.data.tobytes() == b'GET /c0'
@@ -133,7 +136,7 @@ async def test_autoclose_many(asyncloop, port, httpd):
     assert m.type == m.Type.Control
     assert c1.unpack(m).as_dict() == {
         'code': 500,
-        'method': -1,
+        'method': UNDEFINED(c1),
         'size': 10,
         'headers': [{'header': 'content-length', 'value': '10'}] + HEADERS,
         'path': f'http://[::1]:{port}/c1',
@@ -169,7 +172,7 @@ async def test_data(asyncloop, port, httpd):
         assert m.addr == 0
         assert c.unpack(m).as_dict() == {
             'code': 500,
-            'method': -1,
+            'method': UNDEFINED(c),
             'size': 12 + len(data),
             'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
             'path': f'http://[::1]:{port}/post',
@@ -196,7 +199,7 @@ async def test_data(asyncloop, port, httpd):
         assert m.addr == addr
         assert c.unpack(m).as_dict() == {
             'code': 500,
-            'method': -1,
+            'method': UNDEFINED(c),
             'size': 12 + len(data),
             'headers': [{'header': 'content-length', 'value': str(12 + len(data))}] + HEADERS + [{'header': 'x-test-header', 'value': 'value'}],
             'path': f'http://[::1]:{port}/post',
