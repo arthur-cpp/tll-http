@@ -13,7 +13,6 @@
 #include "tll/util/cppring.h"
 #include "tll/util/size.h"
 
-#include "names.h"
 #include "lws_scheme.h"
 #include "ev-backend.h"
 
