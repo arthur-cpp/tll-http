@@ -31,7 +31,7 @@ uws = shared_library('tll-uws',
 		install : true
 )
 
-uws = shared_library('tll-curl',
+curl = shared_library('tll-curl',
 		['src/curl.cc'],
 		include_directories : include,
 		dependencies : [fmt, tll, curl],
