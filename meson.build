@@ -9,10 +9,11 @@ include = [include_directories('src')]
 
 tll = dependency('tll')
 fmt = dependency('fmt')
-lws = dependency('libwebsockets')
 curl = dependency('libcurl', version: '>=7.63', required: false, disabler: true)
 libuv = dependency('libuv')
-libev = meson.get_compiler('c').find_library('ev')
+
+lws = dependency('libwebsockets', required: get_option('with_lws'), disabler: true)
+libev = meson.get_compiler('c').find_library('ev', required: get_option('with_lws'), disabler: true)
 
 lib = shared_library('tll-ws',
 		['src/channel.cc', 'src/names.cc', 'src/ev-backend.c'],
