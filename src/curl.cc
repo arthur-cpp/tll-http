@@ -432,7 +432,18 @@ int curl_session_t::init()
 	if (!curl)
 		return _log.fail(EINVAL, "Failed to init curl easy handle");
 
+#ifdef CURLOPT_CURLU
 	tll::curl::setopt<CURLOPT_CURLU>(curl, url);
+#else
+	{
+		char *s = nullptr;
+		if (curl_url_get(url, CURLUPART_URL, &s, 0))
+			return _log.fail(EINVAL, "Failed to get destination URL");
+		url_string = s;
+		curl_free(s);
+		tll::curl::setopt<CURLOPT_URL>(curl, url_string.c_str());
+	}
+#endif
 
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, parent->_method.data());
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);

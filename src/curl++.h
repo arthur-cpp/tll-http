@@ -29,7 +29,9 @@ template <CURLoption option> struct _curlopt {};
 
 template <> struct _curlopt<CURLOPT_URL> { using type = const char *; };
 
+#ifdef CURLOPT_CURLU
 template <> struct _curlopt<CURLOPT_CURLU> { using type = CURLU *; };
+#endif
 template <> struct _curlopt<CURLOPT_HTTPHEADER> { using type = struct curl_slist *; };
 
 template <> struct _curlopt<CURLOPT_EXPECT_100_TIMEOUT_MS> { using type = long; };

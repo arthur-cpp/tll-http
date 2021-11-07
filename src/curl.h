@@ -27,6 +27,7 @@ struct curl_session_t
 
 	CURL * curl = nullptr;
 	CURLU * url = nullptr;
+	std::string url_string; // When CURLOPT_CURLU not available
 
 	tll_addr_t addr = {};
 

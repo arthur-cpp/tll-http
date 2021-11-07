@@ -9,7 +9,7 @@ include = [include_directories('src')]
 
 tll = dependency('tll')
 fmt = dependency('fmt')
-curl = dependency('libcurl', version: '>=7.63', required: false, disabler: true)
+curl = dependency('libcurl') #, version: '>=7.63', required: false, disabler: true)
 libuv = dependency('libuv')
 
 lws = dependency('libwebsockets', required: get_option('with_lws'), disabler: true)
