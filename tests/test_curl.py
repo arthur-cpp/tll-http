@@ -182,6 +182,14 @@ async def test_data(asyncloop, port, httpd):
         assert m.addr == 0
         assert m.data.tobytes() == b'POST /post :' + data
 
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == 0
+        assert c.unpack(m).as_dict() == {
+            'code': 0,
+            'error': ''
+        }
+
         await asyncloop.sleep(0.001)
 
         assert c.state == c.State.Active
@@ -208,6 +216,14 @@ async def test_data(asyncloop, port, httpd):
         m = await c.recv(0.02)
         assert m.addr == addr
         assert m.data.tobytes() == b'POST /post :' + data
+
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == addr
+        assert c.unpack(m).as_dict() == {
+            'code': 0,
+            'error': ''
+        }
 
         await asyncloop.sleep(0.001)
 

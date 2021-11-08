@@ -792,6 +792,28 @@ void curl_session_t::finalize(int code)
 		return;
 
 	callback_data(wbuf.data(), wbuf.size());
+
+	std::vector<unsigned char> buf;
+	buf.resize(sizeof(curl_scheme::disconnect));
+	auto data = (curl_scheme::disconnect *) buf.data();
+
+	data->code = code;
+
+	if (code) {
+		std::string_view error = curl_easy_strerror((CURLcode) code);
+		offset_ptr_resize(buf, data->error, error.size() + 1);
+
+		data = (curl_scheme::disconnect *) buf.data();
+		memcpy(data->error.data(), error.data(), error.size());
+	}
+
+	tll_msg_t msg = {};
+	msg.type = TLL_MESSAGE_CONTROL;
+	msg.msgid = curl_scheme::disconnect::id;
+	msg.addr = addr;
+	msg.data = buf.data();
+	msg.size = buf.size();
+	parent->_callback(&msg);
 }
 
 void curl_session_t::reset()
