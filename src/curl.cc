@@ -218,7 +218,7 @@ void ChCURLMulti::_curl_process()
 			if (msg->data.result) {
 				_log.warning("Transfer for {} failed: {}", session->parent->name, curl_easy_strerror(msg->data.result));
 			} else {
-				_log.info("Transfer for {} finished: {}", session->parent->name, code?*code:0);
+				_log.debug("Transfer for {} finished: {}", session->parent->name, code?*code:0);
 			}
 			session->finalize(msg->data.result);
 		}
@@ -509,7 +509,7 @@ int ChCURL::_open(const PropsView &)
 			return _log.fail(r, "Failed to open curl multi channel");
 	}
 
-	_log.info("Create curl easy handle for {}", _host);
+	_log.debug("Create curl easy handle for {}", _host);
 
 	if (_mode == Mode::Single) {
 		std::unique_ptr<curl_session_t> s(new curl_session_t);
@@ -676,7 +676,7 @@ size_t curl_session_t::header(char * cdata, size_t size)
 
 size_t curl_session_t::read(char * data, size_t size)
 {
-	parent->_log.error("Requested {} bytes of data", size);
+	parent->_log.debug("Requested {} bytes of data", size);
 	if (roff == rbuf.size())
 		return 0; //CURL_READFUNC_PAUSE;
 
@@ -693,9 +693,9 @@ void curl_session_t::connected()
 
 	wsize = tll::curl::getinfo<CURLINFO_CONTENT_LENGTH_DOWNLOAD_T>(curl);
 	if (wsize)
-		parent->_log.info("Content-Size: {}", *wsize);
+		parent->_log.debug("Content-Size: {}", *wsize);
 	else
-		parent->_log.info("Content-Size is not supported for this protocol");
+		parent->_log.debug("Content-Size is not supported for this protocol");
 
 	std::string_view url = tll::curl::getinfo<CURLINFO_EFFECTIVE_URL>(curl).value_or("");
 	parent->_log.info("Send connect message for {}", url);
@@ -783,7 +783,7 @@ size_t curl_session_t::write(char * data, size_t size)
 
 void curl_session_t::finalize(int code)
 {
-	parent->_log.info("Finalize transfer: {}", code);
+	parent->_log.debug("Finalize transfer: {}", code);
 	state = tll::state::Closing;
 
 	parent->_update_dcaps(dcaps::Pending | dcaps::Process);
