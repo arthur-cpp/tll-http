@@ -28,6 +28,8 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	std::unique_ptr<tll::Channel> _timer;
 	std::list<std::unique_ptr<tll::Channel>> _sockets;
 
+	int _sockidx = 0;
+
  public:
 	static constexpr std::string_view channel_protocol() { return "curl"; }
 
@@ -67,7 +69,14 @@ class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
 		return 0;
 	}
 
-	int bind(int fd) { return this->_update_fd(fd); }
+	int bind(int fd)
+	{
+		if (fd == -1)
+			_update_dcaps(0, dcaps::Process | dcaps::CPOLLMASK);
+		else
+			_update_dcaps(dcaps::Process);
+		return this->_update_fd(fd);
+	}
 
 	void update_poll(unsigned caps) { _dcaps_poll(caps); }
 
@@ -87,7 +96,7 @@ TLL_DEFINE_IMPL(ChCURL);
 TLL_DEFINE_IMPL(ChCURLMulti);
 TLL_DEFINE_IMPL(ChCURLSocket);
 
-	std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::Url &url, tll::Channel * master)
+std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::Url &url, tll::Channel * master)
 {
 	auto proto = url.proto();
 	auto sep = proto.find("+");
@@ -173,6 +182,7 @@ int ChCURLMulti::_close()
 	_multi.reset();
 
 	_timer->close();
+	_sockidx = 0;
 
 	return 0;
 }
@@ -191,9 +201,11 @@ void ChCURLMulti::_free()
 int ChCURLMulti::_process(long timeout, int flags)
 {
 	_log.debug("Check for curl info messages");
+	unsigned empty = 0;
 	for (auto i = _sockets.begin(); i != _sockets.end(); ) {
-		if ((*i)->state() == tll::state::Closed) {
-			_log.debug("Cleanup closed socket {}", (*i)->name());
+		if ((*i)->fd() == -1 && ++empty > 5) {
+			_log.debug("Cleanup empty socket {}", (*i)->name());
+			(*i)->close();
 			i = _sockets.erase(i);
 		} else
 			i++;
@@ -256,9 +268,9 @@ static constexpr std::string_view what2str(int what)
 {
 	switch (what) {
 	case CURL_POLL_IN: return "CURL_POLL_IN";
-	case CURL_POLL_OUT: return "CURL_POLL_IN";
-	case CURL_POLL_INOUT: return "CURL_POLL_IN";
-	case CURL_POLL_REMOVE: return "CURL_POLL_IN";
+	case CURL_POLL_OUT: return "CURL_POLL_OUT";
+	case CURL_POLL_INOUT: return "CURL_POLL_INOUT";
+	case CURL_POLL_REMOVE: return "CURL_POLL_REMOVE";
 	}
 	return "CURL_POLL unknown";
 }
@@ -313,28 +325,32 @@ int ChCURLMulti::_curl_socket_cb(CURL *e, curl_socket_t fd, int what, ChCURLSock
 	_log.debug("Curl socket callback {}", what2str(what));
 	if (what == CURL_POLL_REMOVE) {
 		if (!c) return 0;
-		auto channel = c->self();
-
-		_log.debug("Remove curl socket channel {}", channel->name());
-		channel->close();
-		_child_del(channel);
+		c->bind(-1);
 		_update_dcaps(dcaps::Pending | dcaps::Process);
 		return 0;
 	}
 
 	if (!c) {
-		_log.debug("Create new socket channel for {}", fd);
-		auto r = context().channel(fmt::format("curl-socket://;tll.internal=yes;name={}/{}", this->name, fd), self(), &ChCURLSocket::impl);
-		if (!r)
-			return this->_log.fail(EINVAL, "Failed to init curl socket channel");
-		_child_add(r.get());
+		for (auto & i : _sockets) {
+			if (i->fd() == -1) {
+				c = channel_cast<ChCURLSocket>(i.get());
+				break;
+			}
+		}
+		if (!c) {
+			_log.debug("Create new socket channel for fd {}", fd);
+			auto r = context().channel(fmt::format("curl-socket://;tll.internal=yes;name={}/{}", this->name, _sockidx++), self(), &ChCURLSocket::impl);
+			if (!r)
+				return this->_log.fail(EINVAL, "Failed to init curl socket channel");
 
-		c = channel_cast<ChCURLSocket>(r.get());
+			_child_add(r.get());
+			c = channel_cast<ChCURLSocket>(r.get());
+			r->open();
+			_sockets.emplace_back(r.release());
+		} else
+			_log.debug("Reuse socket {} for fd {}", c->name, fd);
+
 		c->bind(fd);
-		c->self()->open();
-
-		_sockets.emplace_back(r.release());
-
 		curl_multi_assign(_multi.get(), fd, c);
 	}
 
