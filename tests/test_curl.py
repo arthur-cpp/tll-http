@@ -228,3 +228,15 @@ async def test_data(asyncloop, port, httpd):
         await asyncloop.sleep(0.001)
 
         assert c.state == c.State.Active
+
+@asyncloop_run
+async def test_disconnect(asyncloop, port, httpd):
+    c = asyncloop.Channel('curl+http://localhost:9/', autoclose='yes', dump='text', name='http')
+    c.open()
+
+    await asyncloop.sleep(0.01)
+
+    m = await c.recv(0.5)
+    assert m.type == m.Type.Control
+    assert m.msgid == c.scheme_control['disconnect'].msgid
+    assert c.unpack(m).as_dict() == {'code': 7, 'error': "Couldn't connect to server"} # Maybe unstable?
