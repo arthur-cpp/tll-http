@@ -804,10 +804,8 @@ void curl_session_t::finalize(int code)
 
 	parent->_update_dcaps(dcaps::Pending | dcaps::Process);
 
-	if (!wbuf.size())
-		return;
-
-	callback_data(wbuf.data(), wbuf.size());
+	if (wbuf.size())
+		callback_data(wbuf.data(), wbuf.size());
 
 	std::vector<unsigned char> buf;
 	buf.resize(sizeof(curl_scheme::disconnect));
