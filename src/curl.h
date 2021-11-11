@@ -55,7 +55,7 @@ struct curl_session_t
 
 	size_t callback_data(const void * data, size_t size);
 
-	void finalize(int code);
+	void finalize(int code, bool skip = false);
 	void close();
 };
 

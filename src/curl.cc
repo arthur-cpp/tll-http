@@ -560,8 +560,16 @@ int ChCURL::_close()
 
 int ChCURL::_post(const tll_msg_t *msg, int flags)
 {
-	if (msg->type != TLL_MESSAGE_DATA)
+	if (msg->type != TLL_MESSAGE_DATA) {
+		if (msg->type == TLL_MESSAGE_CONTROL && msg->msgid == curl_scheme::disconnect::id) {
+			auto s = _sessions.find(msg->addr.u64);
+			if (s == _sessions.end())
+				return _log.fail(EEXIST, "Failed to disconnect: session {} not found", msg->addr.u64);
+			_log.debug("User disconnect for session {}", msg->addr.u64);
+			s->second->finalize(0, true);
+		}
 		return 0;
+	}
 
 	if (_mode == Mode::Data) {
 		_log.debug("Create new session {} with data size {}", msg->addr.u64, msg->size);
@@ -797,7 +805,7 @@ size_t curl_session_t::write(char * data, size_t size)
 	return size;
 }
 
-void curl_session_t::finalize(int code)
+void curl_session_t::finalize(int code, bool skip)
 {
 	parent->_log.debug("Finalize transfer: {}", code);
 	state = tll::state::Closing;
@@ -806,6 +814,8 @@ void curl_session_t::finalize(int code)
 
 	if (wbuf.size())
 		callback_data(wbuf.data(), wbuf.size());
+
+	if (skip) return;
 
 	std::vector<unsigned char> buf;
 	buf.resize(sizeof(curl_scheme::disconnect));

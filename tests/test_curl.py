@@ -240,3 +240,25 @@ async def test_disconnect(asyncloop, port, httpd):
     assert m.type == m.Type.Control
     assert m.msgid == c.scheme_control['disconnect'].msgid
     assert c.unpack(m).as_dict() == {'code': 7, 'error': "Couldn't connect to server"} # Maybe unstable?
+
+@asyncloop_run
+async def test_post_disconnect(asyncloop, port, httpd):
+    c = asyncloop.Channel(f'curl+http://[::1]:{port}/post', dump='text', name='http', transfer='data', method='POST')
+    c.open()
+
+    DISCONNECT = c.scheme_control['disconnect'].msgid
+    CONNECT = c.scheme_control['connect'].msgid
+
+    c.post(b'xxx', addr=0)
+    c.post(b'zzz', addr=1)
+    c.post(b'', type=c.Type.Control, msgid=DISCONNECT, addr=0)
+
+    await asyncloop.sleep(0.01)
+
+    httpd.handle_request()
+    httpd.handle_request()
+
+    m = await c.recv(0.01)
+    assert m.type == m.Type.Control
+    assert m.msgid == CONNECT
+    assert m.addr == 1
