@@ -262,3 +262,55 @@ async def test_post_disconnect(asyncloop, port, httpd):
     assert m.type == m.Type.Control
     assert m.msgid == CONNECT
     assert m.addr == 1
+
+@asyncloop_run
+async def test_control(asyncloop, port, httpd):
+    c = asyncloop.Channel('curl+http://[::1]:{}/post'.format(port), dump='text', name='post', transfer='control', method='POST', **{'expect-timeout': '1000ms', 'header.Expect':''})
+    c.open()
+
+    await asyncloop.sleep(0.01)
+
+    httpd.handle_request()
+
+    with pytest.raises(TimeoutError): await c.recv(0.01)
+
+    data = [b'xxx', b'zzzzzzz']
+
+    for i,d in enumerate(data):
+        msg = {'path': f'/extra/{i}' , 'size': len(d), 'headers': [{'header': 'X-Test-Header', 'value': str(i)}]}
+        c.post(msg, name='connect', type=c.Type.Control, addr=i)
+
+    for i,d in enumerate(data):
+        c.post(d, addr=i)
+
+    for i,d in enumerate(data):
+        await asyncloop.sleep(0.01)
+
+        httpd.handle_request()
+
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == i
+        assert c.unpack(m).as_dict() == {
+            'code': 500,
+            'method': UNDEFINED(c),
+            'size': 20 + len(d),
+            'headers': [{'header': 'content-length', 'value': str(20 + len(d))}] + HEADERS + [{'header': 'x-test-header', 'value': str(i)}],
+            'path': f'http://[::1]:{port}/post/extra/{i}',
+        }
+
+        m = await c.recv(0.02)
+        assert m.addr == i
+        assert m.data.tobytes() == b'POST /post/extra/%d :' % i + d
+
+        m = await c.recv(0.01)
+        assert m.type == m.Type.Control
+        assert m.addr == i
+        assert c.unpack(m).as_dict() == {
+            'code': 0,
+            'error': ''
+        }
+
+        await asyncloop.sleep(0.001)
+
+        assert c.state == c.State.Active

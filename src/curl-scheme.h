@@ -34,8 +34,8 @@ static constexpr std::string_view scheme = R"(yamls://
 enum class method_t : int8_t { UNDEFINED = -1, GET = 0, HEAD = 1, POST = 2, PUT = 3, DELETE = 4, CONNECT = 5, OPTIONS = 6, TRACE = 7, PATCH = 8 };
 
 struct __attribute__((packed)) header {
-	tll::scheme::offset_ptr_t<char> header;
-	tll::scheme::offset_ptr_t<char> value;
+	tll::scheme::String<> header;
+	tll::scheme::String<> value;
 };
 
 struct __attribute__((packed)) connect {
@@ -43,14 +43,14 @@ struct __attribute__((packed)) connect {
 	method_t method;
 	int16_t code;
 	int64_t size;
-	tll::scheme::offset_ptr_t<char> path;
+	tll::scheme::String<> path;
 	tll::scheme::offset_ptr_t<header> headers;
 };
 
 struct __attribute__((packed)) disconnect {
 	static constexpr int id = 2;
 	int16_t code;
-	tll::scheme::offset_ptr_t<char> error;
+	tll::scheme::String<> error;
 };
 
 }

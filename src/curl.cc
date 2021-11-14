@@ -558,26 +558,65 @@ int ChCURL::_close()
 	return 0;
 }
 
+int ChCURL::_connect(curl_session_t * s)
+{
+	std::unique_ptr<curl_session_t> ptr(s);
+
+	if (_sessions.find(s->addr.u64) != _sessions.end())
+		return _log.fail(EEXIST, "Failed to create new session: address {} already used", s->addr.u64);
+
+	s->parent = this;
+
+	if (s->init())
+		return _log.fail(EINVAL, "Failed to init base curl handle");
+
+	_log.debug("Add curl handle to {}", _master->name);
+	if (auto r = curl_multi_add_handle(_master->multi(), s->curl); r)
+		return _log.fail(EINVAL, "curl_multi_add_handle({}) failed: {}", _host, curl_multi_strerror(r));
+
+	_sessions.emplace(s->addr.u64, ptr.release());
+	return 0;
+}
+
 int ChCURL::_post(const tll_msg_t *msg, int flags)
 {
 	if (msg->type != TLL_MESSAGE_DATA) {
-		if (msg->type == TLL_MESSAGE_CONTROL && msg->msgid == curl_scheme::disconnect::id) {
+		if (msg->type != TLL_MESSAGE_CONTROL)
+			return 0;
+		if (msg->msgid == curl_scheme::disconnect::id) {
 			auto s = _sessions.find(msg->addr.u64);
 			if (s == _sessions.end())
 				return _log.fail(EEXIST, "Failed to disconnect: session {} not found", msg->addr.u64);
 			_log.debug("User disconnect for session {}", msg->addr.u64);
 			s->second->finalize(0, true);
+			return 0;
+		} else if (_mode == Mode::Full && msg->msgid == curl_scheme::connect::id) {
+			if (msg->size < sizeof(curl_scheme::connect))
+				return _log.fail(EMSGSIZE, "Connected message too small: {}", msg->size);
+			auto data = (const curl_scheme::connect *) msg->data;
+
+			std::unique_ptr<curl_session_t> s(new curl_session_t);
+			auto url = _host + std::string(*data->path);
+			_log.debug("Create new session {} with data size {} to url {}", msg->addr.u64, data->size, url);
+
+			s->url = curl_url();
+			if (auto r = curl_url_set(s->url, CURLUPART_URL, url.c_str(), 0); r)
+				return _log.fail(EINVAL, "Failed to parse url '{}': {}", url, curl_url_strerror(r));
+			s->addr = msg->addr;
+			s->rsize = data->size;
+
+			s->headers = _headers;
+			for (auto & i : data->headers)
+				s->headers[std::string(i.header)] = *i.value;
+			return _connect(s.release());
 		}
-		return 0;
+		return _log.fail(ENOENT, "Invalid control message id {}", msg->msgid);
 	}
 
 	if (_mode == Mode::Data) {
 		_log.debug("Create new session {} with data size {}", msg->addr.u64, msg->size);
 
-		if (_sessions.find(msg->addr.u64) != _sessions.end())
-			return _log.fail(EEXIST, "Failed to create new session: address {} already used", msg->addr.u64);
 		std::unique_ptr<curl_session_t> s(new curl_session_t);
-		s->parent = this;
 		s->url = curl_url_dup(_curl_url);
 		s->headers = _headers;
 		s->addr = msg->addr;
@@ -586,15 +625,17 @@ int ChCURL::_post(const tll_msg_t *msg, int flags)
 		s->rbuf.resize(msg->size);
 		memcpy(s->rbuf.data(), msg->data, msg->size);
 
-		if (s->init())
-			return _log.fail(EINVAL, "Failed to init base curl handle");
-
-		_log.debug("Add curl handle to {}", _master->name);
-		if (auto r = curl_multi_add_handle(_master->multi(), s->curl); r)
-			return _log.fail(EINVAL, "curl_multi_add_handle({}) failed: {}", _host, curl_multi_strerror(r));
-
-		_sessions.emplace(msg->addr.u64, s.release());
+		return _connect(s.release());
 	}
+
+	auto i = _sessions.find(msg->addr.u64);
+	if (i == _sessions.end())
+		return _log.fail(EEXIST, "Failed to post data: session {} not found", msg->addr.u64);
+	auto & s = i->second;
+	auto data = static_cast<const char *>(msg->data);
+	//auto restart = s->rbuf.size() == s->roff;
+	s->rbuf.insert(s->rbuf.end(), data, data + msg->size);
+	_log.debug("New data size: {}", s->rbuf.size());
 	return 0;
 }
 
