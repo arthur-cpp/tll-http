@@ -911,4 +911,4 @@ void curl_session_t::close()
 	curl = nullptr;
 }
 
-auto channel_module = tll::make_channel_module<ChCURL, ChCURLMulti>();
+TLL_DEFINE_MODULE(ChCURL, ChCURLMulti);

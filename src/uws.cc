@@ -630,4 +630,4 @@ TLL_DEFINE_IMPL(WSHTTP);
 TLL_DEFINE_IMPL(WSWS);
 TLL_DEFINE_IMPL(WSPub);
 
-auto channel_module = tll::make_channel_module<WSServer, WSHTTP, WSWS, WSPub>();
+TLL_DEFINE_MODULE(WSServer, WSHTTP, WSWS, WSPub);
