@@ -36,7 +36,7 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	static constexpr auto process_policy() { return ProcessPolicy::Never; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
-	int _open(const tll::PropsView &);
+	int _open(const tll::ConstConfig &);
 	int _close();
 	void _free();
 
@@ -140,7 +140,7 @@ int ChCURLMulti::_init(const tll::Channel::Url &url, tll::Channel *master)
 	return 0;
 }
 
-int ChCURLMulti::_open(const PropsView &url)
+int ChCURLMulti::_open(const ConstConfig &url)
 {
 	if (_timer->open())
 		return _log.fail(EINVAL, "Failed to open timer");
@@ -517,7 +517,7 @@ void ChCURL::_free()
 	_curl_url = nullptr;
 }
 
-int ChCURL::_open(const PropsView &)
+int ChCURL::_open(const ConstConfig &)
 {
 	if (_master_ptr) {
 		auto r = _master_ptr->open();

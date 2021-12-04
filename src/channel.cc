@@ -83,7 +83,7 @@ class WSServer : public tll::channel::Base<WSServer>
 	static constexpr std::string_view channel_protocol() { return "ws"; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
-	int _open(const tll::PropsView &);
+	int _open(const tll::ConstConfig &);
 	int _close();
 	void _destroy();
 
@@ -145,7 +145,7 @@ class WSNode : public tll::channel::Base<T>
 	static constexpr auto process_policy() { return Base::ProcessPolicy::Never; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
-	int _open(const tll::PropsView &);
+	int _open(const tll::ConstConfig &);
 	int _close();
 
 	int _post_data(const tll_msg_t *msg, int flags);
@@ -268,7 +268,7 @@ void poll_cb_ev(struct ev_loop *, ev_io *ev, int)
 }
 
 
-int WSServer::_open(const PropsView &s)
+int WSServer::_open(const ConstConfig &s)
 {
 #ifdef __linux__
 	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
@@ -605,7 +605,7 @@ int WSNode<T>::_init(const Channel::Url &url, Channel * master)
 }
 
 template <typename T>
-int WSNode<T>::_open(const PropsView &props)
+int WSNode<T>::_open(const ConstConfig &props)
 {
 	if (_master->node_add(_prefix, static_cast<T *>(this)))
 		return this->_log.fail(EINVAL, "Failed to register node");
