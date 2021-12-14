@@ -8,6 +8,7 @@
 #include "src/curl.h"
 #include "src/curl++.h"
 
+#include "tll/channel/module.h"
 #include "tll/scheme/channel/timer.h"
 
 #include "tll/util/memoryview.h"

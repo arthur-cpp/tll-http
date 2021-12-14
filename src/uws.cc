@@ -10,6 +10,7 @@
 #include <variant>
 
 #include "tll/channel/base.h"
+#include "tll/channel/module.h"
 #include "tll/util/cppring.h"
 #include "tll/util/size.h"
 
