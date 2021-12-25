@@ -90,7 +90,7 @@ class WSServer : public tll::channel::Base<WSServer>
 
  private:
 
-	enum class Method { GET, POST, PUT, HEAD };
+	enum class Method { GET, POST, PUT, HEAD, OPTIONS };
 
 	template <Method M>
 	void _http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req);
@@ -378,6 +378,7 @@ int WSServer::_open(const ConstConfig &s)
 		.post("/*", [this](auto *res, auto *req) { this->_http<Method::POST>(res, req); })
 		.put("/*", [this](auto *res, auto *req) { this->_http<Method::PUT>(res, req); })
 		.head("/*", [this](auto *res, auto *req) { this->_http<Method::HEAD>(res, req); })
+		.options("/*", [this](auto *res, auto *req) { this->_http<Method::OPTIONS>(res, req); })
 		.ws<user_t>("/*", std::move(wsopt))
 		.listen(_port, [this](auto *token) {
 			this->_app_socket = token;
