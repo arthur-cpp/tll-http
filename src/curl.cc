@@ -16,7 +16,7 @@
 
 #include <unistd.h>
 
-#include "src/curl-scheme.h"
+#include "src/http-scheme-binder.h"
 
 using namespace tll;
 
@@ -109,7 +109,7 @@ std::optional<const tll_channel_impl_t *> ChCURL::_init_replace(const Channel::U
 
 int ChCURLMulti::_init(const tll::Channel::Url &url, tll::Channel *master)
 {
-	_scheme_control.reset(context().scheme_load(curl_scheme::scheme));
+	_scheme_control.reset(context().scheme_load(http_scheme::scheme_string));
 	if (!_scheme_control.get())
 		return _log.fail(EINVAL, "Failed to load control scheme");
 
@@ -301,9 +301,9 @@ static constexpr std::string_view curl_url_strerror(CURLUcode r)
 	return "Unknown error";
 }
 
-static constexpr std::string_view method_str(curl_scheme::method_t m)
+static constexpr std::string_view method_str(http_scheme::method_t m)
 {
-       using method_t = curl_scheme::method_t;
+       using method_t = http_scheme::method_t;
 
        switch (m) {
        case method_t::UNDEFINED: return "UNDEFINED";
@@ -410,7 +410,7 @@ int ChCURL::_init(const tll::Channel::Url &url, tll::Channel *master)
 	if (_mode == Mode::Single)
 		_autoclose = reader.getT("autoclose", false);
 
-	using method_t = curl_scheme::method_t;
+	using method_t = http_scheme::method_t;
 	auto method = reader.getT("method", method_t::GET, {{"GET", method_t::GET}, {"HEAD", method_t::HEAD}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"DELETE", method_t::DELETE}, {"CONNECT", method_t::CONNECT}, {"OPTIONS", method_t::OPTIONS}, {"TRACE", method_t::TRACE}, {"PATCH", method_t::PATCH}});
 	_method = method_str(method);
 
@@ -584,31 +584,31 @@ int ChCURL::_post(const tll_msg_t *msg, int flags)
 	if (msg->type != TLL_MESSAGE_DATA) {
 		if (msg->type != TLL_MESSAGE_CONTROL)
 			return 0;
-		if (msg->msgid == curl_scheme::disconnect::id) {
+		if (msg->msgid == http_scheme::disconnect<tll_msg_t>::meta_id()) {
 			auto s = _sessions.find(msg->addr.u64);
 			if (s == _sessions.end())
 				return _log.fail(EEXIST, "Failed to disconnect: session {} not found", msg->addr.u64);
 			_log.debug("User disconnect for session {}", msg->addr.u64);
 			s->second->finalize(0, true);
 			return 0;
-		} else if (_mode == Mode::Full && msg->msgid == curl_scheme::connect::id) {
-			if (msg->size < sizeof(curl_scheme::connect))
+		} else if (_mode == Mode::Full && msg->msgid == http_scheme::connect<tll_msg_t>::meta_id()) {
+			auto data = tll::scheme::make_binder<http_scheme::connect>(*msg);
+			if (msg->size < data.meta_size())
 				return _log.fail(EMSGSIZE, "Connected message too small: {}", msg->size);
-			auto data = (const curl_scheme::connect *) msg->data;
 
 			std::unique_ptr<curl_session_t> s(new curl_session_t);
-			auto url = _host + std::string(*data->path);
-			_log.debug("Create new session {} with data size {} to url {}", msg->addr.u64, data->size, url);
+			auto url = _host + std::string(data.get_path());
+			_log.debug("Create new session {} with data size {} to url {}", msg->addr.u64, data.get_size(), url);
 
 			s->url = curl_url();
 			if (auto r = curl_url_set(s->url, CURLUPART_URL, url.c_str(), 0); r)
 				return _log.fail(EINVAL, "Failed to parse url '{}': {}", url, curl_url_strerror(r));
 			s->addr = msg->addr;
-			s->rsize = data->size;
+			s->rsize = data.get_size();
 
 			s->headers = _headers;
-			for (auto & i : data->headers)
-				s->headers[std::string(i.header)] = *i.value;
+			for (auto & i : data.get_headers())
+				s->headers[std::string(i.get_header())] = i.get_value();
 			return _connect(s.release());
 		}
 		return _log.fail(ENOENT, "Invalid control message id {}", msg->msgid);
@@ -767,37 +767,28 @@ void curl_session_t::connected()
 	parent->_log.info("Send connect message for {}", url);
 
 	std::vector<unsigned char> buf;
-	buf.resize(sizeof(curl_scheme::connect));
-	auto data = (curl_scheme::connect *) buf.data();
+	auto data = tll::scheme::make_binder<http_scheme::connect>(buf);
+	buf.resize(data.meta_size());
 
-	data->code = tll::curl::getinfo<CURLINFO_RESPONSE_CODE>(curl).value_or(0);
-	data->method = curl_scheme::method_t::UNDEFINED;
-	data->size = wsize.value_or(-1);
+	data.set_code(tll::curl::getinfo<CURLINFO_RESPONSE_CODE>(curl).value_or(0));
+	data.set_method(http_scheme::method_t::UNDEFINED);
+	data.set_size(wsize.value_or(-1));
 
-	offset_ptr_resize(buf, data->path, url.size() + 1);
+	data.set_path(url);
 
-	data = (curl_scheme::connect *) buf.data();
-	memcpy(data->path.data(), url.data(), url.size());
-
-	offset_ptr_resize(buf, data->headers, headers.size());
+	auto h = data.get_headers();
+	h.resize(headers.size());
 
 	auto i = 0u;
 	for (auto & [k, v] : headers) {
-		data = (curl_scheme::connect *) buf.data();
-		offset_ptr_resize(buf, data->headers.data()[i].header, k.size() + 1);
-		data = (curl_scheme::connect *) buf.data();
-		memcpy(data->headers.data()[i].header.data(), k.data(), k.size());
-
-		offset_ptr_resize(buf, data->headers.data()[i].value, v.size() + 1);
-		data = (curl_scheme::connect *) buf.data();
-		memcpy(data->headers.data()[i].value.data(), v.data(), v.size());
-
+		h[i].set_header(k);
+		h[i].set_value(v);
 		i++;
 	}
 
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
-	msg.msgid = curl_scheme::connect::id;
+	msg.msgid = data.meta_id();
 	msg.addr = addr;
 	msg.data = buf.data();
 	msg.size = buf.size();
@@ -860,22 +851,19 @@ void curl_session_t::finalize(int code, bool skip)
 	if (skip) return;
 
 	std::vector<unsigned char> buf;
-	buf.resize(sizeof(curl_scheme::disconnect));
-	auto data = (curl_scheme::disconnect *) buf.data();
+	auto data = tll::scheme::make_binder<http_scheme::disconnect>(buf);
+	buf.resize(data.meta_size());
 
-	data->code = code;
+	data.set_code(code);
 
 	if (code) {
 		std::string_view error = curl_easy_strerror((CURLcode) code);
-		offset_ptr_resize(buf, data->error, error.size() + 1);
-
-		data = (curl_scheme::disconnect *) buf.data();
-		memcpy(data->error.data(), error.data(), error.size());
+		data.set_error(error);
 	}
 
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
-	msg.msgid = curl_scheme::disconnect::id;
+	msg.msgid = data.meta_id();
 	msg.addr = addr;
 	msg.data = buf.data();
 	msg.size = buf.size();
