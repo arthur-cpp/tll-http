@@ -14,7 +14,7 @@
 #include "tll/util/cppring.h"
 #include "tll/util/size.h"
 
-#include "lws_scheme.h"
+#include "http-scheme-binder.h"
 #include "ev-backend.h"
 
 #ifdef __linux__
@@ -132,7 +132,7 @@ class WSNode : public tll::channel::Base<T>
 
 	int _post_control(R * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != lws_scheme::disconnect::id)
+		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
 			return 0;
 		_disconnected(resp, msg->addr);
 		resp->end();
@@ -183,7 +183,7 @@ class WSWS : public WSNode<WSWS, uWS::WebSocket<false, true>>
 
 	int _post_control(Response * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != lws_scheme::disconnect::id)
+		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
 			return 0;
 		resp->end();
 		_disconnected(nullptr, msg->addr);
@@ -256,7 +256,7 @@ class WSPub : public WSNode<WSPub, uWS::WebSocket<false, true>>
 
 	int _post_control(Response * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != lws_scheme::disconnect::id)
+		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
 			return 0;
 		resp->end();
 		_disconnected(nullptr, msg->addr);
@@ -298,7 +298,7 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	//if (!url.host().size())
 	//	return _log.fail(EINVAL, "No path to database");
 
-	_scheme_control.reset(context().scheme_load(lws_scheme::scheme));
+	_scheme_control.reset(context().scheme_load(http_scheme::scheme_string));
 	if (!_scheme_control.get())
 		return _log.fail(EINVAL, "Failed to load control scheme");
 
@@ -478,20 +478,17 @@ template <typename T, typename R>
 int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr)
 {
 	std::vector<unsigned char> buf;
-	buf.resize(sizeof(lws_scheme::connect) + uri.size() + 1);
-	auto data = (lws_scheme::connect *) buf.data();
+	auto data = tll::scheme::make_binder<http_scheme::connect>(buf);
+	buf.resize(data.meta_size());
 
-	data->path.entity = 1;
-	data->path.size = uri.size() + 1;
-	data->path.offset = sizeof(data->path);
-	memcpy(data + 1, uri.data(), uri.size());
+	data.set_path(uri);
 
 	*addr = _next_addr();
 	_sessions.insert(std::make_pair(addr->u64, resp));
 
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
-	msg.msgid = lws_scheme::connect::id;
+	msg.msgid = data.meta_id();
 	msg.addr = *addr;
 	msg.data = buf.data();
 	msg.size = buf.size();
@@ -508,13 +505,16 @@ int WSNode<T, R>::_disconnected(R * resp, tll_addr_t addr)
 			_sessions.erase(it);
 	}
 
-	lws_scheme::disconnect data = {};
+	std::vector<char> buf;
+	auto data = tll::scheme::make_binder<http_scheme::disconnect>(buf);
+	buf.resize(data.meta_size());
+
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
-	msg.msgid = lws_scheme::disconnect::id;
 	msg.addr = addr;
-	msg.data = &data;
-	msg.size = sizeof(data);
+	msg.msgid = data.meta_id();
+	msg.data = buf.data();
+	msg.size = buf.size();
 	this->_callback(&msg);
 
 	//user->pending = {};
