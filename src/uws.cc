@@ -37,6 +37,8 @@ class WSServer : public tll::channel::Base<WSServer>
 
 	int _timerfd = -1;
 
+	static thread_local WSServer * _instance;
+
 	std::unique_ptr<uWS::App> _app;
 	us_listen_socket_t * _app_socket;
 	uWS::Loop * _app_loop;
@@ -59,7 +61,11 @@ class WSServer : public tll::channel::Base<WSServer>
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::ConstConfig &);
 	int _close();
-	void _destroy();
+	void _free()
+	{
+		if (_instance == this)
+			_instance = nullptr;
+	}
 
 	int _process(long timeout, int flags);
 
@@ -100,6 +106,8 @@ class WSServer : public tll::channel::Base<WSServer>
 	void _ws_drain(uWS::WebSocket<false, true> *);
 	void _ws_close(uWS::WebSocket<false, true> *, int code, std::string_view message);
 };
+
+thread_local WSServer * WSServer::_instance = nullptr;
 
 template <typename T, typename R = uWS::HttpResponse<false>>
 class WSNode : public tll::channel::Base<T>
@@ -298,6 +306,9 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	//if (!url.host().size())
 	//	return _log.fail(EINVAL, "No path to database");
 
+	if (_instance)
+		return _log.fail(EINVAL, "Only one UWS server per thread, blocked by existing: '{}'", _instance->name);
+
 	_scheme_control.reset(context().scheme_load(http_scheme::scheme_string));
 	if (!_scheme_control.get())
 		return _log.fail(EINVAL, "Failed to load control scheme");
@@ -322,6 +333,7 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
 
+	_instance = this;
 	return 0;
 }
 
