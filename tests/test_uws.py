@@ -21,7 +21,7 @@ def context():
 
 @pytest.fixture
 def server(asyncloop, port):
-    c = asyncloop.Channel(f'ws://*:{port}', name='server')
+    c = asyncloop.Channel(f'uws://*:{port}', name='server')
     yield c
     c.close()
 
@@ -65,7 +65,7 @@ async def check_response(c, addr, connect={}, data=None):
 
 @asyncloop_run
 async def test_http(asyncloop, server, client):
-    sub = asyncloop.Channel("ws+http://path", master=server, name='server/http', dump='yes');
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/http', dump='yes');
 
     server.open()
     client.open()
