@@ -1,0 +1,199 @@
+/*
+ * Copyright (c) 2021 Pavel Shramov <shramov@mexmat.net>
+ *
+ * tll is free software; you can redistribute it and/or modify
+ * it under the terms of the MIT license. See LICENSE for details.
+ */
+
+#include <tll/channel/base.h>
+#include <tll/channel/module.h>
+#include <tll/util/time.h>
+
+#include "uwsc.h"
+#include "log.h"
+#include "ev-backend.h"
+
+#include <chrono>
+
+#include <sys/timerfd.h>
+#include <unistd.h>
+
+using namespace std::chrono_literals;
+
+class WSClient : public tll::channel::Base<WSClient>
+{
+ 	int _timerfd = -1;
+
+	struct uwsc_client * _client = nullptr;
+
+	struct ev_loop * _ev_loop = nullptr;
+	struct ev_io _ev_timer = {};
+
+	std::string _url;
+	std::chrono::seconds _ping_interval = 3s;
+
+public:
+	static constexpr std::string_view channel_protocol() { return "ws"; }
+	static constexpr auto open_policy() { return OpenPolicy::Manual; }
+
+	int _init(const tll::Channel::Url &, tll::Channel *master);
+	void _free()
+	{
+		uwsc_logger_unref();
+	}
+
+	int _open(const tll::ConstConfig &);
+	int _close();
+
+	int _process(long timeout, int flags);
+	int _post(const tll_msg_t *msg, int flags);
+
+private:
+	void _on_open(uwsc_client *c);
+	void _on_error(uwsc_client *c, int err, const char * msg);
+	void _on_close(uwsc_client *cl, int code, const char * reason);
+	void _on_message(uwsc_client *c, void *data, size_t len, bool binary);
+};
+
+using namespace tll;
+
+int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
+{
+	auto reader = channel_props_reader(url);
+	_ping_interval = reader.getT("ping", 3s);
+	if (!reader)
+		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
+
+	_url = fmt::format("{}://{}", url.proto(), url.host());
+
+	uwsc_logger_ref();
+
+	return Base<WSClient>::_init(url, master);
+}
+
+int WSClient::_open(const tll::ConstConfig &url)
+{
+	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	if (_timerfd == -1)
+		return _log.fail(EINVAL, "Failed to create timer fd: {}", strerror(errno));
+
+	_ev_loop = ev_loop_new(EVFLAG_NOENV | EVFLAG_NOSIGMASK);
+	if (!_ev_loop)
+		return _log.fail(EINVAL, "Faield to init libev event loop");
+
+	ev_io_init(&_ev_timer, 
+		[](struct ev_loop *, ev_io *ev, int)
+		{
+			int64_t buf;
+			auto r = read(ev->fd, &buf, sizeof(buf));
+			(void) r;
+		},
+		_timerfd,
+		EV_READ);
+	ev_io_start(_ev_loop, &_ev_timer);
+
+	ev_run(_ev_loop, EVRUN_NOWAIT);
+
+	struct itimerspec its = {};
+	its.it_interval = { 0, 10000000 };
+	its.it_value = { 0, 1 };
+	if (timerfd_settime(_timerfd, 0, &its, nullptr))
+		return _log.fail(EINVAL, "Failed to rearm timerfd: {}", strerror(errno));
+
+	_client = uwsc_new(_ev_loop, _url.c_str(), _ping_interval.count(), nullptr);
+	if (!_client)
+		return _log.fail(EINVAL, "Failed to init uwsc client"); 
+
+	_client->ext = this;
+	_client->onopen = [](uwsc_client *c) { static_cast<WSClient *>(c->ext)->_on_open(c); };
+	_client->onerror = [](uwsc_client *c, int e, const char *m) { static_cast<WSClient *>(c->ext)->_on_error(c, e, m); };
+	_client->onclose = [](uwsc_client *c, int e, const char *m) { static_cast<WSClient *>(c->ext)->_on_close(c, e, m); };
+	_client->onmessage = [](uwsc_client *c, void *d, size_t l, bool b) { static_cast<WSClient *>(c->ext)->_on_message(c, d, l, b); };
+
+	auto fd = tll_ev_backend_fd(_ev_loop);
+
+	if (fd != -1) {
+		_update_fd(fd);
+		_update_dcaps(dcaps::CPOLLIN);
+	}
+
+	return 0;
+}
+
+int WSClient::_close()
+{
+	this->_update_fd(-1);
+
+	if (_client) {
+		_client->free(_client);
+		::free(_client);
+	}
+	_client = nullptr;
+
+	if (_timerfd != -1)
+		::close(_timerfd);
+	_timerfd = -1;
+
+	if (_ev_loop)
+		ev_loop_destroy(_ev_loop);
+	_ev_loop = nullptr;
+
+	return 0;
+}
+
+int WSClient::_post(const tll_msg_t *msg, int flags)
+{
+	if (msg->type != TLL_MESSAGE_DATA)
+		return 0;
+	_client->send(_client, msg->data, msg->size, UWSC_OP_BINARY);
+	return 0;
+}
+
+int WSClient::_process(long timeout, int flags)
+{
+	_log.debug("Process");
+	if (state() == tll::state::Closing) {
+		close(true);
+		return 0;
+	}
+
+	auto r = ev_run(_ev_loop, EVRUN_NOWAIT);
+	if (r < 0)
+		return _log.fail(EINVAL, "ev_run failed: {}", r);
+	return 0;
+}
+
+void WSClient::_on_open(uwsc_client *c)
+{
+	_log.info("Connection established");
+	state(tll::state::Active);
+}
+
+void WSClient::_on_error(uwsc_client *c, int err, const char * msg)
+{
+	_log.info("Error occured: {}", msg);
+	state(tll::state::Error);
+}
+
+void WSClient::_on_close(uwsc_client *cl, int code, const char * reason)
+{
+	_log.info("Connection closed: {} {}", code, reason);
+	state(tll::state::Closing);
+	_dcaps_pending(true);
+}
+
+void WSClient::_on_message(uwsc_client *c, void *data, size_t len, bool binary)
+{
+	tll_msg_t msg = {};
+	msg.type = TLL_MESSAGE_DATA;
+	msg.data = data;
+	msg.size = len;
+	_callback_data(&msg);
+}
+
+struct WSSClient : public WSClient { static tll::channel_impl<WSSClient> impl; };
+
+TLL_DEFINE_IMPL(WSClient);
+tll::channel_impl<WSSClient> WSSClient::impl = {"wss"};
+
+TLL_DEFINE_MODULE(WSClient, WSSClient);
