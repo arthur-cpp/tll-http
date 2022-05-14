@@ -25,9 +25,9 @@ lib = shared_library('tll-ws',
 subdir('third_party')
 
 uws = shared_library('tll-uws',
-		['src/uws.cc'],
+		['src/uws.cc', 'src/uws-epoll.c'],
 		include_directories : include,
-		dependencies : [fmt, tll, libuv, uwebsockets],
+		dependencies : [fmt, tll, libuv, uwebsockets, usockets],
 		install : true
 )
 

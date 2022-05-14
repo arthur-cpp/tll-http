@@ -15,14 +15,7 @@
 #include "tll/util/size.h"
 
 #include "http-scheme-binder.h"
-#include "ev-backend.h"
-
-#ifdef __linux__
-#include <sys/timerfd.h>
-#include <unistd.h>
-#endif
-
-#include <uv.h>
+#include "uws-epoll.h"
 
 using namespace tll;
 
@@ -35,16 +28,11 @@ class WSServer : public tll::channel::Base<WSServer>
 	using node_ptr_t = std::variant<WSHTTP *, WSWS *, WSPub *>;
  	std::map<std::string_view, node_ptr_t, std::less<>> _nodes;
 
-	int _timerfd = -1;
-
 	static thread_local WSServer * _instance;
 
 	std::unique_ptr<uWS::App> _app;
 	us_listen_socket_t * _app_socket;
 	uWS::Loop * _app_loop;
-
-	uv_loop_t _uv_loop = {};
-	uv_poll_t _uv_timer = {};
 
 	std::string _host;
 	unsigned short _port;
@@ -339,37 +327,16 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 
 int WSServer::_open(const ConstConfig &s)
 {
-#ifdef __linux__
-	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-	if (_timerfd == -1)
-		return _log.fail(EINVAL, "Failed to create timer fd: {}", strerror(errno));
+	_app_loop = uWS::Loop::get();
+	_app_loop->integrate();
 
-	struct itimerspec its = {};
-	its.it_interval = { 0, 100000000 };
-	its.it_value = { 0, 100000000 };
-	if (timerfd_settime(_timerfd, 0, &its, nullptr))
-		return _log.fail(EINVAL, "Failed to rearm timerfd: {}", strerror(errno));
-
-	if (uv_loop_init(&_uv_loop))
-		return _log.fail(EINVAL, "Failed to init libuv event loop");
-	auto fd = uv_backend_fd(&_uv_loop);
-
-	_app_loop = uWS::Loop::get(&_uv_loop);
-
-	uv_poll_init(&_uv_loop, &_uv_timer, _timerfd);
-	uv_poll_start(&_uv_timer, UV_READABLE, [](uv_poll_t * handle, int status, int event) {
-		int64_t buf;
-		auto r = read(handle->io_watcher.fd, &buf, sizeof(buf));
-		(void) r;
-	});
-
-	uv_run(&_uv_loop, UV_RUN_NOWAIT);
+	auto us_loop = (us_loop_t *) _app_loop;
+	auto fd = us_loop->fd;
 
 	if (fd != -1) {
 		_update_fd(fd);
 		_update_dcaps(dcaps::CPOLLIN);
 	}
-#endif
 
 	_app.reset(new uWS::App());
 	uWS::App::WebSocketBehavior wsopt = {};
@@ -406,42 +373,28 @@ int WSServer::_close()
 {
 	this->_update_fd(-1);
 
-	if (_timerfd != -1) {
-		::close(_timerfd);
-		_timerfd = -1;
-	}
-
-	uv_close((uv_handle_t *) &_uv_timer, nullptr);
-
-	_log.debug("Close UV loop");
+	_log.debug("Close US loop");
 
 	if (_app_socket) {
 		us_listen_socket_close(0, _app_socket);
 		_app_socket = nullptr;
 	}
 
-	//uv_loop_close(&_uv_loop);
-	for (auto i = 0u; i < 100 && uv_loop_close(&_uv_loop) == UV_EBUSY; i++) {
-		if (_app_loop) _app_loop->integrate();
-		uv_run(&_uv_loop, UV_RUN_ONCE);
-	}
+	for (auto i = 0u; i < 100; i++)
+		us_loop_step((us_loop_t *) _app_loop, 0);
+
 	_app.reset();
-	for (auto i = 0u; i < 100 && uv_loop_close(&_uv_loop) == UV_EBUSY; i++) {
-		if (_app_loop) _app_loop->integrate();
-		uv_run(&_uv_loop, UV_RUN_ONCE);
-	}
+	for (auto i = 0u; i < 100; i++)
+		us_loop_step((us_loop_t *) _app_loop, 0);
+
 	_app_loop->free();
-	for (auto i = 0u; i < 100 && uv_loop_close(&_uv_loop) == UV_EBUSY; i++) {
-		uv_run(&_uv_loop, UV_RUN_ONCE);
-	}
 
 	return 0;
 }
 
 int WSServer::_process(long timeout, int flags)
 {
-	_app_loop->integrate();
-	auto r = uv_run(&_uv_loop, UV_RUN_NOWAIT);
+	auto r = us_loop_step((us_loop_t *) _app_loop, 0);
 	if (r < 0)
 		return _log.fail(EINVAL, "UV run failed: {}", r);
 	return 0;
