@@ -4,3 +4,12 @@
 [submodule "third_party/uwebsockets"]
 	path = third_party/uwebsockets
 	url = git://github.com/uNetworking/uWebSockets.git
+[submodule "third_party/libuwsc"]
+	path = third_party/libuwsc
+	url = https://github.com/zhaojh329/libuwsc
+[submodule "third_party/uwsc/ssl"]
+	path = third_party/uwsc/ssl
+	url = https://github.com/zhaojh329/ssl
+[submodule "third_party/uwsc/buffer"]
+	path = third_party/uwsc/buffer
+	url = https://github.com/zhaojh329/buffer

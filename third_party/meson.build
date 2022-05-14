@@ -1,5 +1,6 @@
 libuv = dependency('libuv')
 zlib = dependency('zlib')
+openssl = dependency('openssl')
 
 usockets_src = files(
 	'usockets/src/bsd.c',
@@ -19,3 +20,22 @@ usockets_lib = static_library('usockets',
 
 usockets = declare_dependency(include_directories: usockets_include, link_with: usockets_lib, dependencies: [libuv, zlib])
 uwebsockets = declare_dependency(include_directories: include_directories('uwebsockets/src'), dependencies: [usockets])
+
+libuwsc_src = files(
+	'libuwsc/src/sha1.c',
+	'libuwsc/src/utils.c',
+	'libuwsc/src/uwsc.c',
+	'uwsc/buffer/buffer.c',
+	'uwsc/ssl/openssl.c',
+	'uwsc/log.cc',
+)
+libuwsc_include = include_directories('libuwsc/src', 'uwsc/buffer', 'uwsc')
+
+libuwsc_lib = static_library('uwsc',
+	libuwsc_src,
+	include_directories: libuwsc_include,
+	c_args: ['-D_GNU_SOURCE', '-Wno-strict-aliasing'],
+	dependencies: [libev, openssl, tll],
+	install: false
+)
+libuwsc = declare_dependency(include_directories: libuwsc_include, link_with: libuwsc_lib, dependencies: [libev, openssl, tll])
