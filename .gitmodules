@@ -1,9 +1,9 @@
 [submodule "third_party/usockets"]
 	path = third_party/usockets
-	url = git://github.com/uNetworking/uSockets.git
+	url = https://github.com/uNetworking/uSockets
 [submodule "third_party/uwebsockets"]
 	path = third_party/uwebsockets
-	url = git://github.com/uNetworking/uWebSockets.git
+	url = https://github.com/uNetworking/uWebSockets
 [submodule "third_party/libuwsc"]
 	path = third_party/libuwsc
 	url = https://github.com/zhaojh329/libuwsc
