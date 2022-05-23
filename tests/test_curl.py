@@ -234,8 +234,6 @@ async def test_disconnect(asyncloop, port, httpd):
     c = asyncloop.Channel('curl+http://localhost:9/', autoclose='yes', dump='text', name='http')
     c.open()
 
-    await asyncloop.sleep(0.01)
-
     m = await c.recv(0.5)
     assert m.type == m.Type.Control
     assert m.msgid == c.scheme_control['disconnect'].msgid

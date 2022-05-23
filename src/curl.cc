@@ -42,15 +42,22 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	void _free();
 
 	int _process(long timeout, int flags);
-	void _curl_process();
+
+	void multi_action(curl_socket_t fd)
+	{
+		int running = 0;
+		if (auto r = curl_multi_socket_action(multi(), fd, 0, &running); r)
+			_log.warning("curl_multi_socket_action({}) failed: {}", fd, curl_multi_strerror(r));
+		_curl_process();
+	}
 
 	CURLM * multi() { return _multi.get(); }
 
  private:
 
-	int _timer_cb();
 	int _curl_timer_cb(CURLM *multi, std::chrono::milliseconds timeout);
 	int _curl_socket_cb(CURL *e, curl_socket_t s, int what, ChCURLSocket *sockp);
+	void _curl_process();
 };
 
 class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
@@ -84,11 +91,7 @@ class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
 	int _process(long timeout, int flags)
 	{
 		_log.debug("Run curl socket action");
-		int running = 0;
-		int events = 0;
-		if (auto r = curl_multi_socket_action(_master->multi(), fd(), events, &running); r)
-			_log.warning("curl_multi_socket_action({}) failed: {}", fd(), curl_multi_strerror(r));
-		_master->_curl_process();
+		_master->multi_action(fd());
 		return EAGAIN;
 	}
 };
@@ -129,7 +132,8 @@ int ChCURLMulti::_init(const tll::Channel::Url &url, tll::Channel *master)
 			return _log.fail(EINVAL, "Failed to create timer channel");
 
 		_timer->callback_add([](const tll_channel_t *, const tll_msg_t *, void *user) {
-			return static_cast<ChCURLMulti *>(user)->_timer_cb();
+			static_cast<ChCURLMulti *>(user)->multi_action(CURL_SOCKET_TIMEOUT);
+			return 0;
 		}, this, TLL_MESSAGE_MASK_DATA);
 
 		_child_add(_timer.get(), "timer");
@@ -236,14 +240,6 @@ void ChCURLMulti::_curl_process()
 			session->finalize(msg->data.result);
 		}
 	} while (true);
-}
-
-int ChCURLMulti::_timer_cb()
-{
-	int running = 0;
-	if (auto r = curl_multi_socket_action(_multi.get(), CURL_SOCKET_TIMEOUT, 0, &running); r)
-		_log.warning("curl_multi_socket_action(timer) failed: {}", curl_multi_strerror(r));
-	return 0;
 }
 
 int ChCURLMulti::_curl_timer_cb(CURLM *multi, std::chrono::milliseconds timeout)
