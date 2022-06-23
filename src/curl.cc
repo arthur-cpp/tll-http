@@ -272,6 +272,7 @@ static constexpr std::string_view what2str(int what)
 	return "CURL_POLL unknown";
 }
 
+#if LIBCURL_VERSION_NUM < 0x075000 // Hex 7.80.0
 static constexpr std::string_view curl_url_strerror(CURLUcode r)
 {
 	switch(r) {
@@ -296,6 +297,7 @@ static constexpr std::string_view curl_url_strerror(CURLUcode r)
 	}
 	return "Unknown error";
 }
+#endif
 
 static constexpr std::string_view method_str(http_scheme::method_t m)
 {
