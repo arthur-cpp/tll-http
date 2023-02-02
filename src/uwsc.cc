@@ -22,7 +22,7 @@ using namespace std::chrono_literals;
 
 class WSClient : public tll::channel::Base<WSClient>
 {
- 	int _timerfd = -1;
+	int _timerfd = -1;
 
 	struct uwsc_client * _client = nullptr;
 
@@ -81,7 +81,7 @@ int WSClient::_open(const tll::ConstConfig &url)
 	if (!_ev_loop)
 		return _log.fail(EINVAL, "Faield to init libev event loop");
 
-	ev_io_init(&_ev_timer, 
+	ev_io_init(&_ev_timer,
 		[](struct ev_loop *, ev_io *ev, int)
 		{
 			int64_t buf;
@@ -102,7 +102,7 @@ int WSClient::_open(const tll::ConstConfig &url)
 
 	_client = uwsc_new(_ev_loop, _url.c_str(), _ping_interval.count(), nullptr);
 	if (!_client)
-		return _log.fail(EINVAL, "Failed to init uwsc client"); 
+		return _log.fail(EINVAL, "Failed to init uwsc client");
 
 	_client->ext = this;
 	_client->onopen = [](uwsc_client *c) { static_cast<WSClient *>(c->ext)->_on_open(c); };
