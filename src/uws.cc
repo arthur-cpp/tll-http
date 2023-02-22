@@ -518,6 +518,8 @@ void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 
 	resp->onAborted([channel, addr]() { channel->_disconnected(nullptr, addr); });
 	resp->onData([channel, addr](std::string_view data, bool last) {
+		if (data.size() == 0 && !last)
+			return;
 		tll_msg_t msg = {};
 		msg.type = TLL_MESSAGE_DATA;
 		msg.addr = addr;

@@ -83,7 +83,37 @@ async def test_http(asyncloop, server, client):
     m = await sub.recv()
 
     assert m.type == m.Type.Control
-    
+
+    m = await sub.recv()
+
+    assert m.type == m.Type.Data
+    assert m.data.tobytes() == b''
+
     sub.post(b'hello', addr=m.addr)
 
+    await check_response(client, 3, {'code':200}, b'hello')
+
+@asyncloop_run
+async def test_http_data(asyncloop, server, port):
+    client = asyncloop.Channel(f'curl+http://127.0.0.1:{port}/path', transfer='data', name='client', dump='frame')
+
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/http', dump='yes');
+
+    server.open()
+    client.open()
+
+    sub.open()
+
+    client.post(b'hello', addr=3)
+
+    m = await sub.recv()
+
+    assert m.type == m.Type.Control
+
+    m = await sub.recv()
+
+    assert m.type == m.Type.Data
+    assert m.data.tobytes() == b'hello'
+
+    sub.post(b'hello', addr=m.addr)
     await check_response(client, 3, {'code':200}, b'hello')
