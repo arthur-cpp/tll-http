@@ -17,7 +17,7 @@ import socketserver
 def context():
     ctx = C.Context()
     try:
-        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-curl"), 'channel_module')
+        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-curl"))
     except:
         pytest.skip("curl:// channel not available")
     return ctx

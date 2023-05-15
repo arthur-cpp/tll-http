@@ -13,8 +13,8 @@ from tll.test_util import ports
 def context():
     ctx = Context()
     try:
-        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uws"), 'channel_module')
-        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uwsc"), 'channel_module')
+        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uws"))
+        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uwsc"))
     except:
         pytest.skip("uws:// or ws:// channels not available")
     return ctx
