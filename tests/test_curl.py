@@ -87,7 +87,7 @@ def asyncloop_run(f, asyncloop, *a, **kw):
     asyncloop.run(f(asyncloop, *a, **kw))
 
 def UNDEFINED(c):
-    return c.scheme_control.enums['method_t'].klass.UNDEFINED
+    return c.scheme_control.enums['Method'].klass.UNDEFINED
 
 @asyncloop_run
 async def test_autoclose(asyncloop, port, httpd):
@@ -236,7 +236,7 @@ async def test_disconnect(asyncloop, port, httpd):
 
     m = await c.recv(0.5)
     assert m.type == m.Type.Control
-    assert m.msgid == c.scheme_control['disconnect'].msgid
+    assert m.msgid == c.scheme_control['Disconnect'].msgid
     assert c.unpack(m).as_dict() == {'code': 7, 'error': "Couldn't connect to server"} # Maybe unstable?
 
 @asyncloop_run
@@ -244,8 +244,8 @@ async def test_post_disconnect(asyncloop, port, httpd):
     c = asyncloop.Channel(f'curl+http://[::1]:{port}/post', dump='text', name='http', transfer='data', method='POST')
     c.open()
 
-    DISCONNECT = c.scheme_control['disconnect'].msgid
-    CONNECT = c.scheme_control['connect'].msgid
+    DISCONNECT = c.scheme_control['Disconnect'].msgid
+    CONNECT = c.scheme_control['Connect'].msgid
 
     c.post(b'xxx', addr=0)
     c.post(b'zzz', addr=1)
@@ -276,7 +276,7 @@ async def test_control(asyncloop, port, httpd):
 
     for i,d in enumerate(data):
         msg = {'path': f'/extra/{i}' , 'size': len(d), 'headers': [{'header': 'X-Test-Header', 'value': str(i)}]}
-        c.post(msg, name='connect', type=c.Type.Control, addr=i)
+        c.post(msg, name='Connect', type=c.Type.Control, addr=i)
 
     for i,d in enumerate(data):
         c.post(d, addr=i)

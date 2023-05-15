@@ -128,7 +128,7 @@ class WSNode : public tll::channel::Base<T>
 
 	int _post_control(R * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
+		if (msg->msgid != http_scheme::Disconnect::meta_id())
 			return 0;
 		_disconnected(resp, msg->addr);
 		resp->end();
@@ -179,7 +179,7 @@ class WSWS : public WSNode<WSWS, uWS::WebSocket<false, true>>
 
 	int _post_control(Response * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
+		if (msg->msgid != http_scheme::Disconnect::meta_id())
 			return 0;
 		resp->end();
 		_disconnected(nullptr, msg->addr);
@@ -252,7 +252,7 @@ class WSPub : public WSNode<WSPub, uWS::WebSocket<false, true>>
 
 	int _post_control(Response * resp, const tll_msg_t *msg, int flags)
 	{
-		if (msg->msgid != http_scheme::disconnect<tll_msg_t>::meta_id())
+		if (msg->msgid != http_scheme::Disconnect::meta_id())
 			return 0;
 		resp->end();
 		_disconnected(nullptr, msg->addr);
@@ -443,7 +443,7 @@ template <typename T, typename R>
 int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr)
 {
 	std::vector<unsigned char> buf;
-	auto data = tll::scheme::make_binder<http_scheme::connect>(buf);
+	auto data = http_scheme::Connect::bind(buf);
 	buf.resize(data.meta_size());
 
 	data.set_path(uri);
@@ -471,7 +471,7 @@ int WSNode<T, R>::_disconnected(R * resp, tll_addr_t addr)
 	}
 
 	std::vector<char> buf;
-	auto data = tll::scheme::make_binder<http_scheme::disconnect>(buf);
+	auto data = http_scheme::Disconnect::bind(buf);
 	buf.resize(data.meta_size());
 
 	tll_msg_t msg = {};

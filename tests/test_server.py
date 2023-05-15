@@ -51,7 +51,7 @@ async def check_response(c, addr, connect={}, data=None):
     m = await c.recv()
     assert (m.type, m.addr) == (m.Type.Control, addr)
     m = c.unpack(m)
-    assert m.SCHEME.name == 'connect'
+    assert m.SCHEME.name == 'Connect'
     assert {k:v for k,v in m.as_dict().items() if k in connect} == connect
 
     m = await c.recv()
@@ -61,7 +61,7 @@ async def check_response(c, addr, connect={}, data=None):
 
     m = await c.recv()
     assert (m.type, m.addr) == (m.Type.Control, addr)
-    assert c.unpack(m).SCHEME.name == 'disconnect'
+    assert c.unpack(m).SCHEME.name == 'Disconnect'
 
 @asyncloop_run
 async def test_http(asyncloop, server, client):
@@ -70,15 +70,15 @@ async def test_http(asyncloop, server, client):
     server.open()
     client.open()
 
-    client.post({'path':'/path'}, type=client.Type.Control, name='connect', addr=1)
+    client.post({'path':'/path'}, type=client.Type.Control, name='Connect', addr=1)
     await check_response(client, 1, {'code':404})
 
     sub.open()
 
-    client.post({'path':'/abc'}, type=client.Type.Control, name='connect', addr=2)
+    client.post({'path':'/abc'}, type=client.Type.Control, name='Connect', addr=2)
     await check_response(client, 2, {'code':404})
 
-    client.post({'path':'/path'}, type=client.Type.Control, name='connect', addr=3)
+    client.post({'path':'/path'}, type=client.Type.Control, name='Connect', addr=3)
 
     m = await sub.recv()
 

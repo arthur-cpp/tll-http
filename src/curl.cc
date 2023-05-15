@@ -299,21 +299,21 @@ static constexpr std::string_view curl_url_strerror(CURLUcode r)
 }
 #endif
 
-static constexpr std::string_view method_str(http_scheme::method_t m)
+static constexpr std::string_view method_str(http_scheme::Method m)
 {
-       using method_t = http_scheme::method_t;
+       using Method = http_scheme::Method;
 
        switch (m) {
-       case method_t::UNDEFINED: return "UNDEFINED";
-       case method_t::GET: return "GET";
-       case method_t::HEAD: return "HEAD";
-       case method_t::POST: return "POST";
-       case method_t::PUT: return "PUT";
-       case method_t::DELETE: return "DELETE";
-       case method_t::CONNECT: return "CONNECT";
-       case method_t::OPTIONS: return "OPTIONS";
-       case method_t::TRACE: return "TRACE";
-       case method_t::PATCH: return "PATCH";
+       case Method::UNDEFINED: return "UNDEFINED";
+       case Method::GET: return "GET";
+       case Method::HEAD: return "HEAD";
+       case Method::POST: return "POST";
+       case Method::PUT: return "PUT";
+       case Method::DELETE: return "DELETE";
+       case Method::CONNECT: return "CONNECT";
+       case Method::OPTIONS: return "OPTIONS";
+       case Method::TRACE: return "TRACE";
+       case Method::PATCH: return "PATCH";
        }
        return "UNDEFINED";
 }
@@ -408,8 +408,8 @@ int ChCURL::_init(const tll::Channel::Url &url, tll::Channel *master)
 	if (_mode == Mode::Single)
 		_autoclose = reader.getT("autoclose", false);
 
-	using method_t = http_scheme::method_t;
-	auto method = reader.getT("method", method_t::GET, {{"GET", method_t::GET}, {"HEAD", method_t::HEAD}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"DELETE", method_t::DELETE}, {"CONNECT", method_t::CONNECT}, {"OPTIONS", method_t::OPTIONS}, {"TRACE", method_t::TRACE}, {"PATCH", method_t::PATCH}});
+	using Method = http_scheme::Method;
+	auto method = reader.getT("method", Method::GET, {{"GET", Method::GET}, {"HEAD", Method::HEAD}, {"POST", Method::POST}, {"PUT", Method::PUT}, {"DELETE", Method::DELETE}, {"CONNECT", Method::CONNECT}, {"OPTIONS", Method::OPTIONS}, {"TRACE", Method::TRACE}, {"PATCH", Method::PATCH}});
 	_method = method_str(method);
 
 	for (auto & [k, c] : url.browse("header.**")) {
@@ -582,15 +582,15 @@ int ChCURL::_post(const tll_msg_t *msg, int flags)
 	if (msg->type != TLL_MESSAGE_DATA) {
 		if (msg->type != TLL_MESSAGE_CONTROL)
 			return 0;
-		if (msg->msgid == http_scheme::disconnect<tll_msg_t>::meta_id()) {
+		if (msg->msgid == http_scheme::Disconnect::meta_id()) {
 			auto s = _sessions.find(msg->addr.u64);
 			if (s == _sessions.end())
 				return _log.fail(EEXIST, "Failed to disconnect: session {} not found", msg->addr.u64);
 			_log.debug("User disconnect for session {}", msg->addr.u64);
 			s->second->finalize(0, true);
 			return 0;
-		} else if (_mode == Mode::Full && msg->msgid == http_scheme::connect<tll_msg_t>::meta_id()) {
-			auto data = tll::scheme::make_binder<http_scheme::connect>(*msg);
+		} else if (_mode == Mode::Full && msg->msgid == http_scheme::Connect::meta_id()) {
+			auto data = http_scheme::Connect::bind(*msg);
 			if (msg->size < data.meta_size())
 				return _log.fail(EMSGSIZE, "Connected message too small: {}", msg->size);
 
@@ -765,11 +765,11 @@ void curl_session_t::connected()
 	parent->_log.info("Send connect message for {}", url);
 
 	std::vector<unsigned char> buf;
-	auto data = tll::scheme::make_binder<http_scheme::connect>(buf);
+	auto data = http_scheme::Connect::bind(buf);
 	buf.resize(data.meta_size());
 
 	data.set_code(tll::curl::getinfo<CURLINFO_RESPONSE_CODE>(curl).value_or(0));
-	data.set_method(http_scheme::method_t::UNDEFINED);
+	data.set_method(http_scheme::Method::UNDEFINED);
 	data.set_size(wsize.value_or(-1));
 
 	data.set_path(url);
@@ -849,7 +849,7 @@ void curl_session_t::finalize(int code, bool skip)
 	if (skip) return;
 
 	std::vector<unsigned char> buf;
-	auto data = tll::scheme::make_binder<http_scheme::disconnect>(buf);
+	auto data = http_scheme::Disconnect::bind(buf);
 	buf.resize(data.meta_size());
 
 	data.set_code(code);

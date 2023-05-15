@@ -66,7 +66,7 @@ async def test(asyncloop, server, client):
     m = await sub.recv(0.001)
     assert m.type == m.Type.Control
     m = sub.unpack(m)
-    assert m.SCHEME.name == 'connect'
+    assert m.SCHEME.name == 'Connect'
 
     client.post(b'xxx')
     client.post(b'yyy')
@@ -90,4 +90,4 @@ async def test(asyncloop, server, client):
     m = await sub.recv(0.001)
     assert m.type == m.Type.Control
     m = sub.unpack(m)
-    assert m.SCHEME.name == 'disconnect'
+    assert m.SCHEME.name == 'Disconnect'
