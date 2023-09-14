@@ -42,7 +42,7 @@ def asyncloop_run(f, asyncloop, *a, **kw):
 
 @pytest.fixture
 def client(asyncloop, port):
-    c = asyncloop.Channel(f'ws://127.0.0.1:{port}/path', name='client', dump='frame')
+    c = asyncloop.Channel(f'ws://127.0.0.1:{port}/path', name='client', dump='yes', **{'header.X-A': 'a', 'header.X-B': 'b'})
     yield c
     c.close()
     del c
@@ -52,13 +52,13 @@ async def test(asyncloop, server, client):
     sub = asyncloop.Channel("uws+ws://path", master=server, name='server/ws', dump='yes');
 
     server.open()
-    client.open()
+    client.open(**{'header.X-A': 'zzz'})
 
     assert await client.recv_state() == client.State.Error
 
     client.close()
     sub.open()
-    client.open()
+    client.open(**{'header.X-A': 'Aa'})
 
     assert await client.recv_state() == client.State.Active
     assert client.state == client.State.Active

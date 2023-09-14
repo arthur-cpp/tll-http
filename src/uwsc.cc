@@ -32,6 +32,9 @@ class WSClient : public tll::channel::Base<WSClient>
 	std::string _url;
 	std::chrono::seconds _ping_interval = 3s;
 
+	using Headers = std::map<std::string, std::string>;
+	Headers _headers;
+
 public:
 	static constexpr std::string_view channel_protocol() { return "ws"; }
 	static constexpr auto open_policy() { return OpenPolicy::Manual; }
@@ -53,6 +56,17 @@ private:
 	void _on_error(uwsc_client *c, int err, const char * msg);
 	void _on_close(uwsc_client *cl, int code, const char * reason);
 	void _on_message(uwsc_client *c, void *data, size_t len, bool binary);
+
+	void _fill_headers(Headers &headers, tll::ConstConfig &config)
+	{
+		for (auto & [hdr, cfg] : config.browse("**")) {
+			auto v = cfg.get();
+			if (!v || !v->size())
+				continue;
+			_log.debug("Extra header: {}: {}", hdr, *v);
+			headers[hdr] = *v;
+		}
+	}
 };
 
 using namespace tll;
@@ -64,6 +78,9 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
 
+	if (auto hcfg = url.sub("header"); hcfg)
+		_fill_headers(_headers, *hcfg);
+
 	_url = fmt::format("{}://{}", url.proto(), url.host());
 
 	uwsc_logger_ref();
@@ -73,6 +90,13 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 
 int WSClient::_open(const tll::ConstConfig &url)
 {
+	Headers headers = _headers;
+	if (auto hcfg = url.sub("header"); hcfg)
+		_fill_headers(headers, *hcfg);
+	std::string hstring;
+	for (auto & [h, v] : headers)
+		hstring += fmt::format("{}: {}\r\n", h, v);
+
 	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (_timerfd == -1)
 		return _log.fail(EINVAL, "Failed to create timer fd: {}", strerror(errno));
@@ -100,7 +124,7 @@ int WSClient::_open(const tll::ConstConfig &url)
 	if (timerfd_settime(_timerfd, 0, &its, nullptr))
 		return _log.fail(EINVAL, "Failed to rearm timerfd: {}", strerror(errno));
 
-	_client = uwsc_new(_ev_loop, _url.c_str(), _ping_interval.count(), nullptr);
+	_client = uwsc_new(_ev_loop, _url.c_str(), _ping_interval.count(), hstring.size() ? hstring.c_str() : nullptr);
 	if (!_client)
 		return _log.fail(EINVAL, "Failed to init uwsc client");
 
