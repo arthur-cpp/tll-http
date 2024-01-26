@@ -103,7 +103,7 @@ class ChCURL : public tll::channel::Base<ChCURL>
 	int _post(const tll_msg_t *msg, int flags);
 
  private:
- 	int _connect(curl_session_t * s);
+	int _connect(curl_session_t * s);
 };
 
 #endif//_TLL_CHANNEL_CURL_H
