@@ -644,7 +644,7 @@ int WSNode<T>::_post_data(const tll_msg_t *msg, int flags)
 		return this->_log.fail(ENOENT, "Failed to post: session 0x{:x} not found", msg->addr.u64);
 	auto user = static_cast<user_t *>(lws_wsi_user(it->second));
 
-	user->pending = std::move(static_cast<T *>(this)->copy(msg));
+	user->pending = static_cast<T *>(this)->copy(msg);
 	lws_callback_on_writable(it->second);
 	return 0;
 }
