@@ -18,6 +18,8 @@
 
 #include "src/http-scheme-binder.h"
 
+constexpr auto format_as(CURLMSG v) noexcept { return static_cast<int>(v); }
+
 using namespace tll;
 
 class ChCURLSocket;
