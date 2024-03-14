@@ -14,7 +14,7 @@ usockets_src = files(
 usockets_include = include_directories('usockets/src')
 usockets_lib = static_library('usockets',
 		usockets_src,
-		c_args : ['-DLIBUS_NO_SSL', '-DLIBUS_USE_EPOLL'],
+		c_args : ['-DLIBUS_NO_SSL', '-DLIBUS_USE_EPOLL', '-Wno-use-after-free'],
 		include_directories : usockets_include,
 		install : false
 )
