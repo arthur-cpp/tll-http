@@ -464,7 +464,7 @@ int curl_session_t::init()
 	}
 #endif
 
-	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, parent->_method.data());
+	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.data());
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 	curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 32);
 
@@ -534,6 +534,7 @@ int ChCURL::_open(const ConstConfig &)
 		std::unique_ptr<curl_session_t> s(new curl_session_t);
 		s->parent = this;
 		s->url = curl_url_dup(_curl_url);
+		s->method = _method;
 		s->headers = _headers;
 
 		if (s->init())
@@ -602,6 +603,11 @@ int ChCURL::_post(const tll_msg_t *msg, int flags)
 			auto url = _host + std::string(data.get_path());
 			_log.debug("Create new session {} with data size {} to url {}", msg->addr.u64, data.get_size(), url);
 
+			if (auto m = data.get_method(); m != http_scheme::Method::UNDEFINED)
+				s->method = method_str(m);
+			else
+				s->method = _method;
+
 			s->url = curl_url();
 			if (auto r = curl_url_set(s->url, CURLUPART_URL, url.c_str(), 0); r)
 				return _log.fail(EINVAL, "Failed to parse url '{}': {}", url, curl_url_strerror(r));
@@ -621,6 +627,7 @@ int ChCURL::_post(const tll_msg_t *msg, int flags)
 
 		std::unique_ptr<curl_session_t> s(new curl_session_t);
 		s->url = curl_url_dup(_curl_url);
+		s->method = _method;
 		s->headers = _headers;
 		s->addr = msg->addr;
 
