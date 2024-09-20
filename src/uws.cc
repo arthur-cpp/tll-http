@@ -373,6 +373,12 @@ int WSServer::_close()
 {
 	this->_update_fd(-1);
 
+	for (auto it = _nodes.begin(); it != _nodes.end(); ) {
+		_log.debug("Close child node {}", it->first);
+		auto node = (it++)->second;
+		std::visit([](auto && c) { c->close(); }, node);
+	}
+
 	_log.debug("Close US loop");
 
 	if (_app_socket) {
