@@ -18,6 +18,7 @@
 #include "uws-epoll.h"
 
 using namespace tll;
+using Method = http_scheme::Method;
 
 class WSHTTP;
 class WSWS;
@@ -86,8 +87,6 @@ class WSServer : public tll::channel::Base<WSServer>
 
  private:
 
-	enum class Method { GET, POST, PUT, HEAD, OPTIONS };
-
 	template <Method M>
 	void _http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req);
 	void _ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req, us_socket_context_t *context);
@@ -148,7 +147,7 @@ class WSNode : public tll::channel::Base<T>
 		return 0;
 	}
 
-	int _connected(R * resp, std::string_view url, tll_addr_t * addr);
+	int _connected(R * resp, std::string_view url, tll_addr_t * addr, Method method = Method::UNDEFINED);
 	int _disconnected(R * resp, tll_addr_t addr);
 
  protected:
@@ -446,13 +445,14 @@ int WSNode<T, R>::_close()
 }
 
 template <typename T, typename R>
-int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr)
+int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr, Method method)
 {
 	std::vector<unsigned char> buf;
 	auto data = http_scheme::Connect::bind(buf);
 	buf.resize(data.meta_size());
 
 	data.set_path(uri);
+	data.set_method(method);
 
 	*addr = _next_addr();
 	_sessions.insert(std::make_pair(addr->u64, resp));
@@ -495,7 +495,7 @@ int WSNode<T, R>::_disconnected(R * resp, tll_addr_t addr)
 	return 0;
 }
 
-template <WSServer::Method M>
+template <Method M>
 void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 {
 	auto uri = req->getUrl();
@@ -515,7 +515,7 @@ void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 
 	auto channel = std::get<WSHTTP *>(it->second);
 	tll_addr_t addr = {};
-	channel->_connected(resp, uri, &addr);
+	channel->_connected(resp, uri, &addr, M);
 
 	auto h = req->getHeader("content-length");
 	if (h.size()) {

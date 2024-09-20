@@ -117,3 +117,24 @@ async def test_http_data(asyncloop, server, port):
 
     sub.post(b'hello', addr=m.addr)
     await check_response(client, 3, {'code':200}, b'hello')
+
+@asyncloop_run
+@pytest.mark.parametrize("send,recv", [('UNDEFINED', 'POST'), ('POST', 'POST'), ('GET', 'GET')])
+async def test_http_method(asyncloop, server, port, send, recv):
+    client = asyncloop.Channel(f'curl+http://127.0.0.1:{port}/path', transfer='control', name='client', dump='yes', method='POST')
+
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/http', dump='yes');
+
+    server.open()
+    client.open()
+
+    sub.open()
+
+    msg = {'path': f'', 'method': send, 'size': 3}
+    client.post(msg, name='Connect', type=client.Type.Control)
+    client.post(b'xxx')
+
+    m = await sub.recv()
+    assert m.type == m.Type.Control
+    m = sub.unpack(m)
+    assert (m.path, m.method) == ('/path', getattr(m.method, recv))
