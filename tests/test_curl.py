@@ -238,7 +238,9 @@ async def test_disconnect(asyncloop, port, httpd):
     m = await c.recv(0.5)
     assert m.type == m.Type.Control
     assert m.msgid == c.scheme_control['Disconnect'].msgid
-    assert c.unpack(m).as_dict() == {'code': 7, 'error': "Couldn't connect to server"} # Maybe unstable?
+    m = c.unpack(m)
+    assert m.code == 7
+    #assert m.error == "Couldn't connect to server" # Error message is not fixed
 
 @asyncloop_run
 async def test_post_disconnect(asyncloop, port, httpd):
