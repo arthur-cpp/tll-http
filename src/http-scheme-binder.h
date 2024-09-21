@@ -5,20 +5,20 @@
 
 namespace http_scheme {
 
-static constexpr std::string_view scheme_string = R"(yamls+gz://eJyNkN1OwzAMhe/3FL6LhFqJjlGm3lVpoJMgnVj2AFUbaKQ1nZoMCaa+Ow4t+5/g7rN9ZPscH3ReywgIGQFIvalNhABAXqStmpJEsLWfaxQobafejwJbhGacMypwfO8BSdgzEwyLCRZPzLVvkVIWJ4gBYjYXs4wvsAqxmseCpshTx9nC6ccOl47ukMRrTN2+B+QlT9jjjDO3yg+6buT/vpzKvJSte/xNyVU5fO7DdphX/dyD3gExtlX6nXQnso98tZEXVLs7tNFaFtYdUiX6uXqw7jPbrRoyPD1YNOXBPQw2CM80Rn0da8LJmWad2+pPd30IZq+7GWI7MJgoUxx7HF/1+J/nZds2l3L/BoM7rSg=)";
+static constexpr std::string_view scheme_string = R"(yamls+gz://eJyNUMtOwzAQvPcr9mYJJRItJUBukWNIJXAq6n5AlLjEUuNUsYsEVf6dNQl9V/Q2uzvaefigs0qGQMgAQOp1ZUIEAORN2rIuSAgb+7VCgtL20ftl4IrQlHNGBZ4DD0jMXplgONzj8MLceogoYVGMcIQwnYpJymc4PeA0jQRNED85nM4c/87BuUNjROI9ou4fKpI5j9nzhDP36rZtB/6f40RmhWyc74WSy6I37sOmv5fd3YMuADG2UfqDtEe0z2y5lmdYWx1aay1z64RUgckuClZdZdtXfYXHgnld7Olhr8PghGPU9yEnGJ9wVpkt/03XlWB2vJu+tr2AsTL5YcbRxYzXmJdNU5/r/QcaZa0D)";
 
 enum class Method: int8_t
 {
-	UNDEFINED = -1,
-	GET = 0,
-	HEAD = 1,
-	POST = 2,
-	PUT = 3,
-	DELETE = 4,
-	CONNECT = 5,
-	OPTIONS = 6,
-	TRACE = 7,
-	PATCH = 8,
+	UNDEFINED = 0,
+	GET = 1,
+	HEAD = 2,
+	POST = 3,
+	PUT = 4,
+	DELETE = 5,
+	CONNECT = 6,
+	OPTIONS = 7,
+	TRACE = 8,
+	PATCH = 9,
 };
 
 struct Header
@@ -44,6 +44,9 @@ struct Header
 
 	template <typename Buf>
 	static binder_type<Buf> bind(Buf &buf, size_t offset = 0) { return binder_type<Buf>(tll::make_view(buf).view(offset)); }
+
+	template <typename Buf>
+	static binder_type<Buf> bind_reset(Buf &buf) { return tll::scheme::make_binder_reset<binder_type, Buf>(buf); }
 };
 
 struct Connect
@@ -84,6 +87,9 @@ struct Connect
 
 	template <typename Buf>
 	static binder_type<Buf> bind(Buf &buf, size_t offset = 0) { return binder_type<Buf>(tll::make_view(buf).view(offset)); }
+
+	template <typename Buf>
+	static binder_type<Buf> bind_reset(Buf &buf) { return tll::scheme::make_binder_reset<binder_type, Buf>(buf); }
 };
 
 struct Disconnect
@@ -112,6 +118,9 @@ struct Disconnect
 
 	template <typename Buf>
 	static binder_type<Buf> bind(Buf &buf, size_t offset = 0) { return binder_type<Buf>(tll::make_view(buf).view(offset)); }
+
+	template <typename Buf>
+	static binder_type<Buf> bind_reset(Buf &buf) { return tll::scheme::make_binder_reset<binder_type, Buf>(buf); }
 };
 
 } // namespace http_scheme
