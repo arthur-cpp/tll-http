@@ -425,8 +425,10 @@ int ChCURL::_init(const tll::Channel::Url &url, tll::Channel *master)
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
 
-	if (_master_ptr)
+	if (_master_ptr) {
 		_child_add(_master_ptr.get(), "multi");
+		internal.caps |= caps::Parent;
+	}
 
 	return 0;
 }
