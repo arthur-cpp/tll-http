@@ -149,7 +149,8 @@ int WSClient::_close()
 	this->_update_fd(-1);
 
 	if (_client) {
-		_client->free(_client);
+		if (_client->free)
+			_client->free(_client);
 		::free(_client);
 	}
 	_client = nullptr;
@@ -196,6 +197,8 @@ void WSClient::_on_open(uwsc_client *c)
 void WSClient::_on_error(uwsc_client *c, int err, const char * msg)
 {
 	_log.info("Error occured: {}", msg);
+	// Client structure is cleared (but not zeroed) on error
+	memset(_client, 0, sizeof(*_client));
 	state(tll::state::Error);
 }
 
