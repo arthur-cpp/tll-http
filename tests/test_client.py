@@ -40,9 +40,9 @@ def port():
 def asyncloop_run(f, asyncloop, *a, **kw):
     asyncloop.run(f(asyncloop, *a, **kw))
 
-@pytest.fixture
-def client(asyncloop, port):
-    c = asyncloop.Channel(f'ws://127.0.0.1:{port}/path', name='client', dump='yes', **{'header.X-A': 'a', 'header.X-B': 'b'})
+@pytest.fixture(scope='function', params=['yes', 'no'])
+def client(asyncloop, port, request):
+    c = asyncloop.Channel(f'ws://127.0.0.1:{port}/path', binary=request.param, name='client', dump='yes', **{'header.X-A': 'a', 'header.X-B': 'b'})
     yield c
     c.close()
     del c

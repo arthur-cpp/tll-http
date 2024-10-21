@@ -23,6 +23,7 @@ using namespace std::chrono_literals;
 class WSClient : public tll::channel::Base<WSClient>
 {
 	int _timerfd = -1;
+	int _ws_op = UWSC_OP_BINARY;
 
 	struct uwsc_client * _client = nullptr;
 
@@ -75,6 +76,7 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 {
 	auto reader = channel_props_reader(url);
 	_ping_interval = reader.getT("ping", 3s);
+	_ws_op = reader.getT("binary", true) ? UWSC_OP_BINARY : UWSC_OP_TEXT;
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
 
@@ -170,7 +172,7 @@ int WSClient::_post(const tll_msg_t *msg, int flags)
 {
 	if (msg->type != TLL_MESSAGE_DATA)
 		return 0;
-	_client->send(_client, msg->data, msg->size, UWSC_OP_BINARY);
+	_client->send(_client, msg->data, msg->size, _ws_op);
 	return 0;
 }
 
