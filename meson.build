@@ -14,6 +14,7 @@ libuv = dependency('libuv')
 
 lws = dependency('libwebsockets', required: get_option('with_lws'), disabler: true)
 libev = meson.get_compiler('c').find_library('ev', required: get_option('with_lws'), disabler: true)
+rst2man = find_program('rst2man', disabler: true, required: false)
 
 lib = shared_library('tll-ws',
 		['src/channel.cc', 'src/names.cc', 'src/ev-backend.c'],
@@ -50,3 +51,13 @@ test('pytest', import('python').find_installation('python3')
 	, env: 'BUILD_DIR=@0@'.format(meson.current_build_dir())
 	, workdir: meson.current_source_dir()
 )
+
+foreach f : ['doc/ws.rst']
+	custom_target('channel-man-@0@'.format(f)
+		, input: f
+		, output : 'tll-channel-@BASENAME@.7'
+		, command : [rst2man, '@INPUT@', '@OUTPUT@']
+		, install_dir: get_option('mandir') / 'man7'
+		, install: true
+	)
+endforeach
