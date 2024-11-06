@@ -7,6 +7,7 @@ import pytest
 
 from tll import asynctll
 from tll.channel import Context
+from tll.error import TLLError
 from tll.test_util import ports
 
 @pytest.fixture
@@ -138,3 +139,7 @@ async def test_http_method(asyncloop, server, port, send, recv):
     assert m.type == m.Type.Control
     m = sub.unpack(m)
     assert (m.path, m.method) == ('/path', getattr(m.method, recv))
+
+def test_fail_open(context):
+    c = context.Channel('uws://127.0.4.0:5010;mode=server;name=master', scheme='xxx')
+    with pytest.raises(TLLError): c.open()

@@ -40,8 +40,8 @@ class WSServer : public tll::channel::Base<WSServer>
 	static thread_local WSServer * _instance;
 
 	std::unique_ptr<uWS::App> _app;
-	us_listen_socket_t * _app_socket;
-	uWS::Loop * _app_loop;
+	us_listen_socket_t * _app_socket = nullptr;
+	uWS::Loop * _app_loop = nullptr;
 
 	std::string _host;
 	unsigned short _port;
@@ -385,14 +385,17 @@ int WSServer::_close()
 		_app_socket = nullptr;
 	}
 
-	for (auto i = 0u; i < 100; i++)
-		us_loop_step((us_loop_t *) _app_loop, 0);
+	if (_app_loop) {
+		for (auto i = 0u; i < 100; i++)
+			us_loop_step((us_loop_t *) _app_loop, 0);
 
-	_app.reset();
-	for (auto i = 0u; i < 100; i++)
-		us_loop_step((us_loop_t *) _app_loop, 0);
+		_app.reset();
+		for (auto i = 0u; i < 100; i++)
+			us_loop_step((us_loop_t *) _app_loop, 0);
 
-	_app_loop->free();
+		_app_loop->free();
+		_app_loop = nullptr;
+	}
 
 	return 0;
 }
