@@ -122,6 +122,7 @@ class WSNode : public tll::channel::Base<T>
 	{
 		resp->writeStatus(uWS::HTTP_200_OK);
 		resp->end(std::string_view((const char *) msg->data, msg->size));
+		_sessions.erase(msg->addr.u64);
 		return 0;
 	}
 
