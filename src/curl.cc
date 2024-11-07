@@ -39,6 +39,7 @@ class ChCURLMulti : public tll::channel::Base<ChCURLMulti>
 	static constexpr std::string_view channel_protocol() { return "curl"; }
 
 	static constexpr auto process_policy() { return ProcessPolicy::Never; }
+	static constexpr auto child_policy() { return ChildPolicy::Many; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::ConstConfig &);

@@ -91,6 +91,7 @@ class ChCURL : public tll::channel::Base<ChCURL>
 	static constexpr std::string_view channel_protocol() { return "curl+"; }
 
 	static constexpr auto process_policy() { return ProcessPolicy::Custom; }
+	static constexpr auto child_policy() { return ChildPolicy::Many; }
 
 	~ChCURL() { _free(); }
 
