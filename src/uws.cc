@@ -47,6 +47,8 @@ class WSServer : public tll::channel::Base<WSServer>
 	unsigned short _port;
 
  public:
+	uWS::OpCode default_op_code = uWS::OpCode::BINARY;
+
 	static constexpr std::string_view channel_protocol() { return "uws"; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
@@ -106,6 +108,7 @@ class WSNode : public tll::channel::Base<T>
 	using Base = tll::channel::Base<T>;
 
 	std::string _prefix;
+	uWS::OpCode _op_code;
 
 	std::map<uint64_t, R *> _sessions;
 	tll_addr_t _addr;
@@ -173,7 +176,7 @@ class WSWS : public WSNode<WSWS, WebSocket>
 
 	int _post_data(Response * resp, const tll_msg_t *msg, int flags)
 	{
-		resp->send(std::string_view((const char *) msg->data, msg->size));
+		resp->send(std::string_view((const char *) msg->data, msg->size), _op_code);
 		return 0;
 	}
 
@@ -285,7 +288,7 @@ class WSPub : public WSNode<WSPub, WebSocket>
 		auto data = std::string_view((const char *) user->position->data(), user->position->size);
 		user->position++;
 
-		ws->send(data);
+		ws->send(data, _op_code);
 	}
 };
 
@@ -313,6 +316,7 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 	_host = host.substr(0, sep);
 
 	auto reader = channel_props_reader(url);
+	default_op_code = reader.getT("binary", true) ? uWS::OpCode::BINARY : uWS::OpCode::TEXT;
 	/*
 	_table = reader.getT<std::string>("table");
 	if ((internal.caps & (caps::Input | caps::Output)) == caps::Input)
@@ -419,6 +423,7 @@ int WSNode<T, R>::_init(const Channel::Url &url, Channel * master)
 	if (!_master)
 		return this->_log.fail(EINVAL, "Master {} must be ws:// channel", master->name());
 
+	this->_op_code = _master->default_op_code;
 	this->_scheme_control.reset(tll_scheme_ref(_master->_scheme_control.get()));
 
 	_prefix = url.host();
