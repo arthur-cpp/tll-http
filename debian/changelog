@@ -1,3 +1,11 @@
+tll-http (0.1.0) unstable; urgency=medium
+
+  * uws: WebSocket and HTTP server based on uWebSocket library
+  * uwsc: WebSocket client based on libuwsc embedded library
+  * curl: HTTP (and lot of other protocols) client based on cURL
+
+ -- Pavel Shramov <shramov@mexmat.net>  Wed, 20 Nov 2024 14:55:11 +0300
+
 tll-http (0.0.0) unstable; urgency=medium
 
   * Initial release.
