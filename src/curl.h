@@ -14,10 +14,7 @@
 #include <map>
 #include <vector>
 
-typedef struct Curl_easy CURL;
-typedef struct Curl_URL CURLU;
-struct curl_slist;
-//typedef struct Curl_multi CURLM;
+#include <curl/curl.h>
 
 class ChCURL;
 
