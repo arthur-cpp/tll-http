@@ -11,10 +11,15 @@ usockets_src = files(
 	'usockets/src/loop.c',
 )
 
+no_use_after_free_args = []
+if cc.get_id() == 'gcc'
+  no_use_after_free_args = ['-Wno-use-after-free']
+endif
+
 usockets_include = include_directories('usockets/src')
 usockets_lib = static_library('usockets',
 		usockets_src,
-		c_args : ['-DLIBUS_NO_SSL', '-DLIBUS_USE_EPOLL', '-Wno-use-after-free'],
+		c_args : ['-DLIBUS_NO_SSL', '-DLIBUS_USE_EPOLL'] + no_use_after_free_args,
 		include_directories : usockets_include,
 		install : false
 )
