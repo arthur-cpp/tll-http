@@ -45,6 +45,7 @@ class WSServer : public tll::channel::Base<WSServer>
 
 	std::string _host;
 	unsigned short _port;
+	size_t _max_payload_size = 16 * 1024;
 
  public:
 	uWS::OpCode default_op_code = uWS::OpCode::BINARY;
@@ -317,6 +318,7 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 
 	auto reader = channel_props_reader(url);
 	default_op_code = reader.getT("binary", true) ? uWS::OpCode::BINARY : uWS::OpCode::TEXT;
+	_max_payload_size = reader.getT<tll::util::Size>("max-payload-size", _max_payload_size);
 	/*
 	_table = reader.getT<std::string>("table");
 	if ((internal.caps & (caps::Input | caps::Output)) == caps::Input)
@@ -346,7 +348,7 @@ int WSServer::_open(const ConstConfig &s)
 	uWS::App::WebSocketBehavior<User> wsopt = {};
 
 	wsopt.compression = uWS::SHARED_COMPRESSOR;
-	wsopt.maxPayloadLength = 16 * 1024;
+	wsopt.maxPayloadLength = _max_payload_size;
 	wsopt.idleTimeout = 10;
 	wsopt.maxBackpressure = 1 * 1024 * 1024;
 
