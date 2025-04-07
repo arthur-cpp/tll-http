@@ -1,3 +1,9 @@
+tll-http (0.1.1) unstable; urgency=medium
+
+  * uws: Configurable maximum payload size
+
+ -- Pavel Shramov <psha@ngoni.psha.org.ru>  Mon, 07 Apr 2025 16:48:42 +0300
+
 tll-http (0.1.0) unstable; urgency=medium
 
   * uws: WebSocket and HTTP server based on uWebSocket library
