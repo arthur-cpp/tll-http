@@ -35,7 +35,9 @@ using WebSocket = uWS::WebSocket<false, true, User>;
 class WSServer : public tll::channel::Base<WSServer>
 {
 	using node_ptr_t = std::variant<WSHTTP *, WSWS *, WSPub *>;
-	std::map<std::string_view, node_ptr_t, std::less<>> _nodes;
+	using NodeMap = std::map<std::string_view, node_ptr_t, std::less<>>;
+	NodeMap _nodes;
+	NodeMap _nodes_wildcard;
 
 	static thread_local WSServer * _instance;
 
@@ -66,25 +68,55 @@ class WSServer : public tll::channel::Base<WSServer>
 	template <typename T>
 	int node_add(std::string_view prefix, T * ptr)
 	{
-		auto it = _nodes.find(prefix);
-		if (it != _nodes.end())
-			return EEXIST;
-		_log.info("Add new {} node {} at {}", T::channel_protocol(), ptr->name, prefix);
-		_nodes.emplace(prefix, ptr);
-		return 0;
+		if (ptr->wildcard)
+			return node_add(_nodes_wildcard, prefix, ptr);
+		return node_add(_nodes, prefix, ptr);
 	}
 
 	template <typename T>
 	int node_remove(std::string_view prefix, T * ptr)
 	{
-		auto it = _nodes.find(prefix);
-		if (it == _nodes.end())
+		if (ptr->wildcard)
+			return node_remove(_nodes_wildcard, prefix, ptr);
+		return node_remove(_nodes, prefix, ptr);
+	}
+
+	node_ptr_t * node_lookup(std::string_view uri)
+	{
+		auto it = _nodes.find(uri);
+		if (it != _nodes.end())
+			return &it->second;
+		it = _nodes_wildcard.upper_bound(uri);
+		if (it == _nodes_wildcard.begin())
+			return nullptr;
+		--it;
+		if (uri.substr(0, it->first.size()) == it->first)
+			return &it->second;
+		return nullptr;
+	}
+
+	template <typename T>
+	int node_add(NodeMap &nodes, std::string_view prefix, T * ptr)
+	{
+		auto it = nodes.find(prefix);
+		if (it != nodes.end())
+			return EEXIST;
+		_log.info("Add new {} node {} at {}", T::channel_protocol(), ptr->name, prefix);
+		nodes.emplace(prefix, ptr);
+		return 0;
+	}
+
+	template <typename T>
+	int node_remove(NodeMap &nodes, std::string_view prefix, T * ptr)
+	{
+		auto it = nodes.find(prefix);
+		if (it == nodes.end())
 			return ENOENT;
 		if (!std::holds_alternative<T *>(it->second))
 			return EINVAL;
 		if (std::get<T *>(it->second) != ptr)
 			return EINVAL;
-		_nodes.erase(it);
+		nodes.erase(it);
 		return 0;
 	}
 
@@ -117,6 +149,8 @@ class WSNode : public tll::channel::Base<T>
  public:
 	static constexpr std::string_view param_prefix() { return "uws"; }
 	static constexpr auto process_policy() { return Base::ProcessPolicy::Never; }
+
+	bool wildcard = false;
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	int _open(const tll::ConstConfig &);
@@ -433,6 +467,8 @@ int WSNode<T, R>::_init(const Channel::Url &url, Channel * master)
 		_prefix = "/";
 	else if (_prefix[0] != '/')
 		_prefix = "/" + _prefix;
+	if (wildcard = (_prefix.back() == '*'); wildcard)
+		_prefix = _prefix.substr(0, _prefix.size() - 1);
 	return 0;
 }
 
@@ -511,20 +547,20 @@ void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 {
 	auto uri = req->getUrl();
 	_log.debug("Requested {}", uri);
-	auto it = _nodes.find(uri);
-	if (it == _nodes.end()) {
+	auto node = node_lookup(uri);
+	if (!node) {
 		_log.debug("Requested url not found: '{}'", uri);
 		resp->writeStatus("404 Not Found");
 		return resp->end("Requested url not found");
 	}
 
-	if (std::holds_alternative<WSWS *>(it->second)) {
+	if (std::holds_alternative<WSWS *>(*node)) {
 		_log.debug("HTTP request to WS endpoint {}", uri);
 		resp->writeStatus("400 Bad Request");
 		return resp->end("WebSocket node");
 	}
 
-	auto channel = std::get<WSHTTP *>(it->second);
+	auto channel = std::get<WSHTTP *>(*node);
 	tll_addr_t addr = {};
 	channel->_connected(resp, uri, &addr, M);
 
@@ -550,8 +586,8 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 {
 	auto uri = req->getUrl();
 	_log.debug("Requested {}", uri);
-	auto it = _nodes.find(uri);
-	if (it == _nodes.end()) {
+	auto node = node_lookup(uri);
+	if (!node) {
 		_log.debug("Requested url not found: '{}'", uri);
 		resp->writeStatus("404 Not Found");
 		return resp->end("Requested url not found");
@@ -559,14 +595,14 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 
 	std::variant<WSWS *, WSPub *> channel;
 
-	if (std::holds_alternative<WSHTTP *>(it->second)) {
+	if (std::holds_alternative<WSHTTP *>(*node)) {
 		_log.debug("WS request to HTTP endpoint {}", uri);
 		resp->writeStatus("400 Bad Request");
 		return resp->end("HTTP node");
-	} else if (std::holds_alternative<WSWS *>(it->second)) {
-		channel = std::get<WSWS *>(it->second);
-	} else if (std::holds_alternative<WSPub *>(it->second)) {
-		channel = std::get<WSPub *>(it->second);
+	} else if (std::holds_alternative<WSWS *>(*node)) {
+		channel = std::get<WSWS *>(*node);
+	} else if (std::holds_alternative<WSPub *>(*node)) {
+		channel = std::get<WSPub *>(*node);
 	}
 
 	resp->template upgrade<User>({ channel }

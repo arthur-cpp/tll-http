@@ -143,3 +143,54 @@ async def test_http_method(asyncloop, server, port, send, recv):
 def test_fail_open(context):
     c = context.Channel('uws://127.0.4.0:5010;mode=server;name=master', scheme='xxx')
     with pytest.raises(TLLError): c.open()
+
+@asyncloop_run
+async def test_http_wildcard(asyncloop, server, client):
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes');
+    wc = asyncloop.Channel("uws+http://pa*", master=server, name='server/wildcard', dump='yes');
+    other = asyncloop.Channel("uws+http://pb*", master=server, name='server/wildcard', dump='yes');
+
+    server.open()
+    client.open()
+
+    client.post({'path':'/path/abc'}, type=client.Type.Control, name='Connect', addr=1)
+    await check_response(client, 1, {'code':404})
+
+    for c in [wc, sub]:
+        c.open()
+
+        client.post({'path':'/abc'}, type=client.Type.Control, name='Connect', addr=2)
+        await check_response(client, 2, {'code':404})
+
+        client.post({'path':'/path'}, type=client.Type.Control, name='Connect', addr=3)
+
+        m = await c.recv()
+
+        assert m.type == m.Type.Control
+        assert c.unpack(m).path == '/path'
+
+        m = await c.recv()
+
+        assert m.type == m.Type.Data
+        assert m.data.tobytes() == b''
+
+        c.post(b'hello', addr=m.addr)
+
+        await check_response(client, 3, {'code':200}, b'hello')
+
+    other.open()
+    client.post({'path':'/path/abc'}, type=client.Type.Control, name='Connect', addr=4)
+
+    m = await wc.recv()
+
+    assert m.type == m.Type.Control
+    assert wc.unpack(m).path == '/path/abc'
+
+    m = await wc.recv()
+
+    assert m.type == m.Type.Data
+    assert m.data.tobytes() == b''
+
+    wc.post(b'hello', addr=m.addr)
+
+    await check_response(client, 4, {'code':200}, b'hello')
