@@ -562,7 +562,7 @@ void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 
 	auto channel = std::get<WSHTTP *>(*node);
 	tll_addr_t addr = {};
-	channel->_connected(resp, uri, &addr, M);
+	channel->_connected(resp, req->getFullUrl(), &addr, M);
 
 	auto h = req->getHeader("content-length");
 	if (h.size()) {

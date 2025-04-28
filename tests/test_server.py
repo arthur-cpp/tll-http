@@ -179,12 +179,12 @@ async def test_http_wildcard(asyncloop, server, client):
         await check_response(client, 3, {'code':200}, b'hello')
 
     other.open()
-    client.post({'path':'/path/abc'}, type=client.Type.Control, name='Connect', addr=4)
+    client.post({'path':'/path/abc?a=b'}, type=client.Type.Control, name='Connect', addr=4)
 
     m = await wc.recv()
 
     assert m.type == m.Type.Control
-    assert wc.unpack(m).path == '/path/abc'
+    assert wc.unpack(m).path == '/path/abc?a=b'
 
     m = await wc.recv()
 
