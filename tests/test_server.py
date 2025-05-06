@@ -194,3 +194,31 @@ async def test_http_wildcard(asyncloop, server, client):
     wc.post(b'hello', addr=m.addr)
 
     await check_response(client, 4, {'code':200}, b'hello')
+
+@asyncloop_run
+async def test_server_headers(asyncloop, server, client):
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes');
+
+    server.open()
+    client.open()
+    sub.open()
+
+    client.post({'path':'/path'}, type=client.Type.Control, name='Connect', addr=1)
+    m = await sub.recv()
+
+    assert m.type == m.Type.Control
+    assert sub.unpack(m).path == '/path'
+
+    headers = [{'header': 'X-A', 'value': 'a'}, {'header': 'X-B', 'value': 'b'}]
+    sub.post({'code': 402, 'headers': headers}, name='Connect', type=sub.Type.Control, addr=m.addr)
+    sub.post(b'xxx', addr=m.addr)
+
+    m = await client.recv()
+    assert m.type == client.Type.Control
+    m = client.unpack(m)
+    assert m.code == 402
+    hdr = {x.header: x.value for x in m.headers if x.header.startswith('x-')}
+    assert hdr == {'x-a': 'a', 'x-b': 'b'}
+
+    m = await client.recv()
+    assert m.data.tobytes() == b'xxx'

@@ -15,6 +15,7 @@
 #include "tll/util/size.h"
 
 #include "http-scheme-binder.h"
+#include "http-status.h"
 #include "uws-epoll.h"
 
 using namespace tll;
@@ -200,6 +201,36 @@ class WSHTTP : public WSNode<WSHTTP>
 {
  public:
 	static constexpr std::string_view channel_protocol() { return "uws+http"; }
+
+	int _post_control(uWS::HttpResponse<false> * resp, const tll_msg_t *msg, int flags)
+	{
+		switch (msg->msgid) {
+		case http_scheme::Connect::meta_id():
+			return _post_connect(resp, msg);
+		case http_scheme::Disconnect::meta_id():
+			resp->end();
+			_disconnected(nullptr, msg->addr);
+			break;
+		default:
+			_log.warning("Unsupported control message {}", msg->msgid);
+			break;
+		}
+		return 0;
+	}
+
+	int _post_connect(uWS::HttpResponse<false> * resp, const tll_msg_t *msg)
+	{
+		auto data = http_scheme::Connect::bind(*msg);
+		if (msg->size < data.meta_size())
+			return _log.fail(EMSGSIZE, "Connect size too small: {} < minimum {}", msg->size, data.meta_size());
+		if (auto status = http_status_string(data.get_code() != 0 ? data.get_code() : 200); status != "")
+			resp->writeStatus(status);
+		else
+			return _log.fail(EINVAL, "Undefined HTTP status code: {}", data.get_code());
+		for (auto & h : data.get_headers())
+			resp->writeHeader(h.get_header(), h.get_value());
+		return 0;
+	}
 };
 
 class WSWS : public WSNode<WSWS, WebSocket>
