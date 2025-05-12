@@ -1,3 +1,12 @@
+tll-http (0.2.0) unstable; urgency=medium
+
+  * uws:
+    Include query part in path
+    Send custom code/headers to HTTP client
+    Wildcard paths
+
+ -- Pavel Shramov <shramov@mexmat.net>  Mon, 12 May 2025 19:27:33 +0300
+
 tll-http (0.1.1) unstable; urgency=medium
 
   * uws: Configurable maximum payload size
