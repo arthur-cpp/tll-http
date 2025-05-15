@@ -39,7 +39,9 @@ Master init parameters
 Endpoint init parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-``PATH`` - path prefix for endpoint
+``PATH`` - path for endpoint, if it ends with ``*`` then it is treated as a prefix, non-prefix paths
+are checked first. For example for two endpoints ``/a/b`` and ``/a/*`` request ``/a/b`` will be
+served by first one and ``/a/c`` by second.
 
 Control messages
 ----------------
