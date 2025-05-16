@@ -46,6 +46,8 @@ curl = shared_library('tll-curl',
 		install : true
 )
 
+install_data(['src/http.yaml'], install_dir: get_option('datadir') / 'tll/scheme/tll/')
+
 test('pytest', import('python').find_installation('python3')
 	, args: ['-m', 'pytest', '-v', 'tests']
 	, env: 'BUILD_DIR=@0@'.format(meson.current_build_dir())
