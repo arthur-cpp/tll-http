@@ -37,6 +37,16 @@ Open parameters
 ``header.**=<string>`` - same as init parameter (overrides if same header is
 specified) but only for one session.
 
+Config info
+~~~~~~~~~~~
+
+When channel enters Active state local and remote network addresses are exported in config info
+subtree under ``local`` and ``remote`` nodes:
+
+  - ``af`` - address family, one of ``ipv4`` or ``ipv6``.
+  - ``host`` - ip address
+  - ``port`` - tcp port
+
 Examples
 --------
 

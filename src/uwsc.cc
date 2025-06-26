@@ -7,6 +7,7 @@
 
 #include <tll/channel/base.h>
 #include <tll/channel/module.h>
+#include <tll/util/sockaddr.h>
 #include <tll/util/time.h>
 
 #include "uwsc.h"
@@ -68,6 +69,7 @@ private:
 			headers[hdr] = *v;
 		}
 	}
+	int _export_address(uwsc_client *c, bool local);
 };
 
 using namespace tll;
@@ -190,9 +192,39 @@ int WSClient::_process(long timeout, int flags)
 	return 0;
 }
 
+int WSClient::_export_address(uwsc_client *c, bool local)
+{
+	const std::string_view path = local ? "local" : "remote";
+
+	tll::network::sockaddr_any addr;
+	addr.size = sizeof(addr);
+	const auto func = local ? getsockname : getpeername;
+	if (func(c->sock, addr, &addr.size))
+		return _log.fail(errno, "Failed to get {} address: {}", path, strerror(errno));
+
+	this->_log.debug("Export {} address: {}", path, addr);
+	auto cfg = this->config_info().sub(path, true);
+	if (!cfg)
+		return this->_log.fail(EINVAL, "Can not create subtree for {} address", path);
+	cfg->setT("af", (network::AddressFamily) addr->sa_family);
+	cfg->setT("port", ntohs(addr.in()->sin_port));
+	if (addr->sa_family == AF_INET)
+		cfg->setT("host", addr.in()->sin_addr);
+	else
+		cfg->setT("host", addr.in6()->sin6_addr);
+
+	return 0;
+}
+
 void WSClient::_on_open(uwsc_client *c)
 {
 	_log.info("Connection established");
+
+	if (_export_address(c, true) || _export_address(c, false)) {
+		state(tll::state::Error);
+		return;
+	}
+
 	state(tll::state::Active);
 }
 

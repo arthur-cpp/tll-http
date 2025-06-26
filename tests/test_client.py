@@ -48,7 +48,7 @@ def client(asyncloop, port, request):
     del c
 
 @asyncloop_run
-async def test(asyncloop, server, client):
+async def test(asyncloop, server, client, port):
     sub = asyncloop.Channel("uws+ws://path", master=server, name='server/ws', dump='yes');
 
     server.open()
@@ -62,6 +62,12 @@ async def test(asyncloop, server, client):
 
     assert await client.recv_state() == client.State.Active
     assert client.state == client.State.Active
+
+    assert client.config['info.local.af'] == 'ipv4'
+    assert client.config['info.local.host'] == '127.0.0.1'
+    assert client.config['info.remote.af'] == 'ipv4'
+    assert client.config['info.remote.host'] == '127.0.0.1'
+    assert client.config['info.remote.port'] == f'{port}'
 
     m = await sub.recv(0.001)
     assert m.type == m.Type.Control
