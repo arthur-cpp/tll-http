@@ -6,7 +6,7 @@
 	url = https://github.com/uNetworking/uWebSockets
 [submodule "third_party/libuwsc"]
 	path = third_party/libuwsc
-	url = https://github.com/zhaojh329/libuwsc
+	url = https://github.com/shramov/libuwsc
 [submodule "third_party/uwsc/ssl"]
 	path = third_party/uwsc/ssl
 	url = https://github.com/zhaojh329/ssl
