@@ -13,6 +13,7 @@
 #include "uwsc.h"
 #include "log.h"
 #include "ev-backend.h"
+#include "uwsc-scheme.h"
 
 #include <chrono>
 
@@ -33,6 +34,8 @@ class WSClient : public tll::channel::Base<WSClient>
 
 	std::string _url;
 	std::chrono::seconds _ping_interval = 3s;
+	std::chrono::time_point<std::chrono::steady_clock> _ping_ts = {};
+	bool _report_ping = false;
 
 	using Headers = std::map<std::string, std::string>;
 	Headers _headers;
@@ -40,6 +43,7 @@ class WSClient : public tll::channel::Base<WSClient>
 public:
 	static constexpr std::string_view channel_protocol() { return "ws"; }
 	static constexpr auto open_policy() { return OpenPolicy::Manual; }
+	static constexpr auto scheme_control_string() { return uwsc_scheme::scheme_string; }
 
 	int _init(const tll::Channel::Url &, tll::Channel *master);
 	void _free()
@@ -58,6 +62,8 @@ private:
 	void _on_error(uwsc_client *c, int err, const char * msg);
 	void _on_close(uwsc_client *cl, int code, const char * reason);
 	void _on_message(uwsc_client *c, void *data, size_t len, bool binary);
+	void _on_control(uwsc_client *c, int op);
+	int _ping(uwsc_client *c);
 
 	void _fill_headers(Headers &headers, tll::ConstConfig &config)
 	{
@@ -78,6 +84,7 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 {
 	auto reader = channel_props_reader(url);
 	_ping_interval = reader.getT("ping", 3s);
+	_report_ping = reader.getT("report-ping", false);
 	_ws_op = reader.getT("binary", true) ? UWSC_OP_BINARY : UWSC_OP_TEXT;
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
@@ -137,6 +144,11 @@ int WSClient::_open(const tll::ConstConfig &url)
 	_client->onerror = [](uwsc_client *c, int e, const char *m) { static_cast<WSClient *>(c->ext)->_on_error(c, e, m); };
 	_client->onclose = [](uwsc_client *c, int e, const char *m) { static_cast<WSClient *>(c->ext)->_on_close(c, e, m); };
 	_client->onmessage = [](uwsc_client *c, void *d, size_t l, bool b) { static_cast<WSClient *>(c->ext)->_on_message(c, d, l, b); };
+	if (_report_ping) {
+		_client->ping = [](uwsc_client *c) { static_cast<WSClient *>(c->ext)->_ping(c); };
+		_client->onping = [](uwsc_client *c) { static_cast<WSClient *>(c->ext)->_on_control(c, UWSC_OP_PING); };
+		_client->onpong = [](uwsc_client *c) { static_cast<WSClient *>(c->ext)->_on_control(c, UWSC_OP_PONG); };
+	}
 
 	auto fd = tll_ev_backend_fd(_ev_loop);
 
@@ -250,6 +262,28 @@ void WSClient::_on_message(uwsc_client *c, void *data, size_t len, bool binary)
 	msg.data = data;
 	msg.size = len;
 	_callback_data(&msg);
+}
+
+int WSClient::_ping(uwsc_client *c)
+{
+	static constexpr std::string_view msg = "libuwsc";
+	_ping_ts = std::chrono::steady_clock::now();
+	return c->send(c, msg.data(), msg.size(), UWSC_OP_PING);
+}
+
+void WSClient::_on_control(uwsc_client *c, int op)
+{
+	tll_msg_t msg = { .type = TLL_MESSAGE_CONTROL, .msgid = op };
+	if (op == UWSC_OP_PONG) {
+		std::array<char, uwsc_scheme::Pong::meta_size()> buf;
+		auto data = uwsc_scheme::Pong::bind(buf);
+		auto dt = std::chrono::steady_clock::now() - _ping_ts;
+		data.set_rtt(dt);
+		msg.data = data.view().data();
+		msg.size = data.view().size();
+		_callback(&msg);
+	} else
+		_callback(&msg);
 }
 
 struct WSSClient : public WSClient { static tll::channel_impl<WSSClient> impl; };

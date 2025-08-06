@@ -1,0 +1,9 @@
+- options: { cpp-namespace: uwsc_scheme }
+
+# WebSocket frame codes
+- name: Ping
+  id: 0x9
+- name: Pong
+  id: 0xA
+  fields:
+    - { name: rtt, type: uint32, options: { type: duration, resolution: ns }}
