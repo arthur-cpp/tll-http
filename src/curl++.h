@@ -9,6 +9,7 @@
 #define _TLL_UTIL_CURLPP_H
 
 #include <memory>
+#include <optional>
 
 #define CURL_NO_OLDIES
 
