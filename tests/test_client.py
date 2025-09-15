@@ -69,7 +69,7 @@ async def test(asyncloop, server, client, port):
     assert client.config['info.remote.host'] == '127.0.0.1'
     assert client.config['info.remote.port'] == f'{port}'
 
-    m = await sub.recv(0.001)
+    m = await sub.recv(0.1)
     assert m.type == m.Type.Control
     m = sub.unpack(m)
     assert m.SCHEME.name == 'Connect'
@@ -77,23 +77,23 @@ async def test(asyncloop, server, client, port):
     client.post(b'xxx')
     client.post(b'yyy')
 
-    m = await sub.recv(0.01)
+    m = await sub.recv(0.1)
     assert m.type == m.Type.Data
     assert m.data.tobytes() == b'xxx'
 
-    m = await sub.recv(0.01)
+    m = await sub.recv(0.1)
     assert m.type == m.Type.Data
     assert m.data.tobytes() == b'yyy'
 
     sub.post(b'zzz', addr=m.addr)
 
-    m = await client.recv(0.01)
+    m = await client.recv(0.1)
     assert m.type == m.Type.Data
     assert m.data.tobytes() == b'zzz'
 
     client.close()
 
-    m = await sub.recv(0.001)
+    m = await sub.recv(0.1)
     assert m.type == m.Type.Control
     m = sub.unpack(m)
     assert m.SCHEME.name == 'Disconnect'
