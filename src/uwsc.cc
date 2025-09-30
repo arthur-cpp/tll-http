@@ -251,6 +251,7 @@ void WSClient::_on_error(uwsc_client *c, int err, const char * msg)
 void WSClient::_on_close(uwsc_client *cl, int code, const char * reason)
 {
 	_log.info("Connection closed: {} {}", code, reason);
+	_client = nullptr;
 	state(tll::state::Closing);
 	_dcaps_pending(true);
 }
