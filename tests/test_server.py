@@ -196,8 +196,11 @@ async def test_http_wildcard(asyncloop, server, client):
     await check_response(client, 4, {'code':200}, b'hello')
 
 @asyncloop_run
-async def test_server_headers(asyncloop, server, client):
-    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes');
+@pytest.mark.parametrize("mode", ['params', 'control'])
+async def test_server_headers(asyncloop, server, client, mode):
+    headers = {'X-A': 'a', 'X-B': 'b'}
+    extra = {} if mode != 'params' else {f'header.{k}': v for k,v in headers.items()}
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes', **extra)
 
     server.open()
     client.open()
@@ -209,8 +212,8 @@ async def test_server_headers(asyncloop, server, client):
     assert m.type == m.Type.Control
     assert sub.unpack(m).path == '/path'
 
-    headers = [{'header': 'X-A', 'value': 'a'}, {'header': 'X-B', 'value': 'b'}]
-    sub.post({'code': 402, 'headers': headers}, name='Connect', type=sub.Type.Control, addr=m.addr)
+    h = [{'header': k, 'value': v} for k,v in headers.items()] if mode == 'control' else []
+    sub.post({'code': 402, 'headers': h}, name='Connect', type=sub.Type.Control, addr=m.addr)
     sub.post(b'xxx', addr=m.addr)
 
     m = await client.recv()

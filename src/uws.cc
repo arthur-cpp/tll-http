@@ -148,7 +148,18 @@ class WSNode : public tll::channel::Base<T>
 	std::string _prefix;
 	uWS::OpCode _op_code;
 
-	std::map<uint64_t, R *> _sessions;
+	struct Session {
+		R * ptr = nullptr;
+		bool initial = true;
+
+		constexpr R * operator -> () { return ptr; }
+		constexpr const R * operator -> () const { return ptr; }
+
+		constexpr operator R * () { return ptr; }
+		constexpr operator const R * () const { return ptr; }
+	};
+
+	std::map<uint64_t, Session> _sessions;
 	tll_addr_t _addr;
 
  public:
@@ -161,19 +172,12 @@ class WSNode : public tll::channel::Base<T>
 	int _open(const tll::ConstConfig &);
 	int _close();
 
-	int _post_data(R * resp, const tll_msg_t *msg, int flags)
+	int _post_data(Session &resp, const tll_msg_t *msg, int flags)
 	{
-		auto data = std::string_view((const char *) msg->data, msg->size);
-		if (flags & TLL_POST_MORE) {
-			resp->cork([resp, data]() { resp->write(data); });
-		} else {
-			resp->cork([resp, data]() { resp->end(data); });
-			_sessions.erase(msg->addr.u64);
-		}
-		return 0;
+		return ENOSYS;
 	}
 
-	int _post_control(R * resp, const tll_msg_t *msg, int flags)
+	int _post_control(Session &resp, const tll_msg_t *msg, int flags)
 	{
 		if (msg->msgid != ws_scheme::Disconnect::meta_id())
 			return 0;
@@ -209,10 +213,27 @@ class WSNode : public tll::channel::Base<T>
 
 class WSHTTP : public WSNode<WSHTTP>
 {
+	std::map<std::string, std::string> _extra_headers;
+
  public:
+	using Base = WSNode<WSHTTP>;
 	static constexpr std::string_view channel_protocol() { return "uws+http"; }
 
-	int _post_control(uWS::HttpResponse<false> * resp, const tll_msg_t *msg, int flags)
+	int _init(const tll::Channel::Url &, tll::Channel *master);
+
+	int _post_data(Session &resp, const tll_msg_t *msg, int flags)
+	{
+		auto data = std::string_view((const char *) msg->data, msg->size);
+		if (flags & TLL_POST_MORE) {
+			resp->cork([this, &resp, data]() { this->_send_headers(resp); resp->write(data); });
+		} else {
+			resp->cork([this, &resp, data]() { this->_send_headers(resp); resp->end(data); });
+			_sessions.erase(msg->addr.u64);
+		}
+		return 0;
+	}
+
+	int _post_control(Session &resp, const tll_msg_t *msg, int flags)
 	{
 		switch (msg->msgid) {
 		case ws_scheme::Connect::meta_id():
@@ -228,7 +249,7 @@ class WSHTTP : public WSNode<WSHTTP>
 		return 0;
 	}
 
-	int _post_connect(uWS::HttpResponse<false> * resp, const tll_msg_t *msg)
+	int _post_connect(Session &resp, const tll_msg_t *msg)
 	{
 		auto data = ws_scheme::Connect::bind(*msg);
 		if (msg->size < data.meta_size())
@@ -237,9 +258,24 @@ class WSHTTP : public WSNode<WSHTTP>
 			resp->writeStatus(status);
 		else
 			return _log.fail(EINVAL, "Undefined HTTP status code: {}", data.get_code());
-		for (auto & h : data.get_headers())
-			resp->writeHeader(h.get_header(), h.get_value());
+		if (data.get_headers().size()) {
+			for (auto & h : data.get_headers())
+				resp->writeHeader(h.get_header(), h.get_value());
+		} else {
+			for (auto &[k, v]: _extra_headers)
+				resp->writeHeader(k, v);
+		}
+		resp.initial = false;
 		return 0;
+	}
+
+	void _send_headers(Session &s) {
+		if (s.initial) {
+			s->writeStatus(uWS::HTTP_200_OK);
+			for (auto &[k, v]: _extra_headers)
+				s->writeHeader(k, v);
+			s.initial = false;
+		}
 	}
 };
 
@@ -563,7 +599,7 @@ int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr, 
 	data.set_method(method);
 
 	*addr = _next_addr();
-	_sessions.insert(std::make_pair(addr->u64, resp));
+	_sessions.insert(std::make_pair(addr->u64, Session { .ptr = resp }));
 
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
@@ -601,6 +637,18 @@ int WSNode<T, R>::_disconnected(R * resp, tll_addr_t addr)
 	if (resp)
 		resp->close();
 	return 0;
+}
+
+int WSHTTP::_init(const Channel::Url &url, Channel * master)
+{
+	if (auto cfg = url.sub("header"); cfg) {
+		for (auto &[k, c] : cfg->browse("**")) {
+			if (auto v = c.get(); v && v->size()) {
+				_extra_headers.emplace(k, *v);
+			}
+		}
+	}
+	return Base::_init(url, master);
 }
 
 template <Method M>
