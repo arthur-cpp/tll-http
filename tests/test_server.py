@@ -222,3 +222,31 @@ async def test_server_headers(asyncloop, server, client):
 
     m = await client.recv()
     assert m.data.tobytes() == b'xxx'
+
+@asyncloop_run
+async def test_post_more(asyncloop, server, client):
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes')
+
+    server.open()
+    client.open()
+    sub.open()
+
+    client.post({'path':'/path'}, type=client.Type.Control, name='Connect', addr=1)
+    m = await sub.recv()
+
+    assert m.type == m.Type.Control
+    assert sub.unpack(m).path == '/path'
+    addr = m.addr
+
+    sub.post(b'xxx', flags=sub.PostFlags.More, addr=addr)
+
+    m = await client.recv()
+    assert m.type == client.Type.Control
+    assert client.unpack(m).code == 200
+
+    with pytest.raises(TimeoutError): await client.recv(timeout=0.001)
+
+    sub.post(b'yyy', addr=addr)
+
+    m = await client.recv()
+    assert m.data.tobytes() == b'xxxyyy'

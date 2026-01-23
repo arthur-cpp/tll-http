@@ -163,9 +163,13 @@ class WSNode : public tll::channel::Base<T>
 
 	int _post_data(R * resp, const tll_msg_t *msg, int flags)
 	{
-		resp->writeStatus(uWS::HTTP_200_OK);
-		resp->end(std::string_view((const char *) msg->data, msg->size));
-		_sessions.erase(msg->addr.u64);
+		auto data = std::string_view((const char *) msg->data, msg->size);
+		if (flags & TLL_POST_MORE) {
+			resp->cork([resp, data]() { resp->write(data); });
+		} else {
+			resp->cork([resp, data]() { resp->end(data); });
+			_sessions.erase(msg->addr.u64);
+		}
 		return 0;
 	}
 
