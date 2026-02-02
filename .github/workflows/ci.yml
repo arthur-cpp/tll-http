@@ -29,7 +29,7 @@ jobs:
         echo "set man-db/auto-update false" | sudo debconf-communicate
         sudo dpkg-reconfigure man-db
     - name: install deps
-      run: sudo apt install ccache cmake meson pkg-config libfmt-dev libtll-dev libev-dev libwebsockets-dev libcurl4-openssl-dev libuv1-dev libssl-dev python3-pytest python3-decorator python3-tll
+      run: sudo apt install ccache cmake meson pkg-config libfmt-dev libtll-dev libev-dev libwebsockets-dev libcurl4-openssl-dev libuv1-dev libssl-dev python3-pytest python3-decorator python3-tll python3-websockets
     - name: configure
       run: meson build
     - name: build
