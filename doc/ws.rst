@@ -56,7 +56,7 @@ Open secure websocket connection in text mode with additional header::
 
 If auth token is changed often - pass it in open parameters::
 
-    channel.open({'heaer.X-Auth-Header': 'TOKEN'})
+    channel.open({'header.X-Auth-Header': 'TOKEN'})
 
 See also
 --------

@@ -14,7 +14,7 @@ Compilation
 -----------
 
 .. note::
-  Prebuilt package ``libtll-http`` can be installed from repostory ``https://psha.org.ru/debian``.
+  Prebuilt package ``libtll-http`` can be installed from repository ``https://psha.org.ru/debian``.
 
 Module depends on TLL_, fmtlib (``libfmt-dev``), cURL_
 (``libcurl4-openssl-dev``), ``libev-dev``, ``libuv1-dev``, ``libssl-dev`` and

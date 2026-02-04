@@ -49,7 +49,7 @@ transfer mode
 method to use in single mode or default one for data/control modes.
 
 ``recv-size=<size>`` (default ``64kb``) - buffer size that accumulates received data. Each time it
-is flled channel produces new message.
+is filled channel produces new message.
 
 ``recv-chunked=<bool>`` (default ``false``) - produce incoming messages as
 chunks of data are received. If disabled - accumulate data (up to ``recv-size``)
@@ -104,7 +104,7 @@ Control scheme:
 Examples
 --------
 
-Retreive data from HTTP server with extra headers and close afterwards
+Retrieve data from HTTP server with extra headers and close afterwards
 
 ::
 

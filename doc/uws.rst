@@ -46,10 +46,14 @@ served by first one and ``/a/c`` by second.
 Control messages
 ----------------
 
-Channel emits two types of control messages: ``Connect`` for new client and ``Disconnect`` when
-request is finished (or websocket connection is terminated). Also ``Disconnect`` can be posted to
-drop client. All data messages from same connection have same ``addr`` field as in ``Connect`` and
-``Disconnect`` messages.
+Channel emits two types of control messages:
+ - ``Connect`` for new client, same for HTTP and WebSocket channels. Fields like ``code`` and
+   ``size`` are not used in WebSocket mode.
+ - ``Disconnect`` when request is finished (or websocket connection is terminated). Can be posted to
+   drop client.
+
+All data messages from same connection have same ``addr`` field as in ``Connect`` and ``Disconnect``
+messages.
 
 .. code-block:: yaml
 
@@ -76,12 +80,12 @@ drop client. All data messages from same connection have same ``addr`` field as 
 Examples
 --------
 
-Create server and server HTTP requests on ``http://host:8080/http-path`` and websocket requests
+Create server and serve HTTP requests on ``http://host:8080/http-path`` and websocket requests
 on ``http://host:8080/ws-path``::
 
     uws://*:8080;name=server
-    uws+http://http-path;name=http
-    uws+ws://ws-path;name=ws
+    uws+http://http-path;name=http;master=server
+    uws+ws://ws-path;name=ws;master=server
 
 See also
 --------
