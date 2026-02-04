@@ -23,7 +23,9 @@ processor.objects:
     init: timer://;interval=10ms
     depends: rtt, ws
   rtt:
+  rtt:
     init: rtt://;stat=yes
+    depends: ws
     channels:
       input: ws
       output: ws
