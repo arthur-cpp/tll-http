@@ -118,7 +118,7 @@ int WSClient::_open(const tll::ConstConfig &url)
 
 	_ev_loop = ev_loop_new(EVFLAG_NOENV | EVFLAG_NOSIGMASK);
 	if (!_ev_loop)
-		return _log.fail(EINVAL, "Faield to init libev event loop");
+		return _log.fail(EINVAL, "Failed to init libev event loop");
 
 	ev_io_init(&_ev_timer,
 		[](struct ev_loop *, ev_io *ev, int)
@@ -244,7 +244,7 @@ void WSClient::_on_open(uwsc_client *c)
 
 void WSClient::_on_error(uwsc_client *c, int err, const char * msg)
 {
-	_log.error("Error occured: {}", msg);
+	_log.error("Error occurred: {}", msg);
 	// Client structure is cleared (but not zeroed) on error
 	memset(_client, 0, sizeof(*_client));
 	state(tll::state::Error);
