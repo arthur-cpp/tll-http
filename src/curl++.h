@@ -25,7 +25,7 @@ using CURL_ptr = std::unique_ptr<CURL, CURL_delete>;
 using CURLM_ptr = std::unique_ptr<CURLM, CURLM_delete>;
 using CURLU_ptr = std::unique_ptr<CURLU, CURLU_delete>;
 
-namespace {
+namespace detail {
 template <CURLoption option> struct _curlopt {};
 
 template <> struct _curlopt<CURLOPT_URL> { using type = const char *; };
@@ -66,12 +66,12 @@ template <> struct _curlinfo<CURLINFO_PRIVATE> { using type = void *; };
 template <> struct _curlinfo<CURLINFO_RESPONSE_CODE> { using type = long; };
 template <> struct _curlinfo<CURLINFO_CONTENT_LENGTH_DOWNLOAD_T> { using type = curl_off_t; };
 template <> struct _curlinfo<CURLINFO_EFFECTIVE_URL> { using type = const char *; };
-}
+} // namespace detail
 
 template <CURLINFO info>
-std::optional<typename _curlinfo<info>::type> getinfo(CURL * curl)
+std::optional<typename detail::_curlinfo<info>::type> getinfo(CURL * curl)
 {
-	typename _curlinfo<info>::type v;
+	typename detail::_curlinfo<info>::type v;
 	auto r = curl_easy_getinfo(curl, info, &v);
 	if (r)
 		return std::nullopt;
@@ -79,13 +79,13 @@ std::optional<typename _curlinfo<info>::type> getinfo(CURL * curl)
 }
 
 template <CURLoption option>
-CURLcode setopt(CURL * curl, typename _curlopt<option>::type v)
+CURLcode setopt(CURL * curl, typename detail::_curlopt<option>::type v)
 {
 	return curl_easy_setopt(curl, option, v);
 }
 
 template <CURLMoption option>
-CURLMcode setopt(CURLM * multi, typename _curlmopt<option>::type v)
+CURLMcode setopt(CURLM * multi, typename detail::_curlmopt<option>::type v)
 {
 	return curl_multi_setopt(multi, option, v);
 }
