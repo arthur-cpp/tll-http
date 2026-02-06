@@ -18,7 +18,7 @@ void uwsc_logger_unref();
 #define uwsc_log_wrap(prio, fmt...)                      \
 	do {                                             \
 		tll_logger_t * l = uwsc_logger();        \
-		if (l && prio > l->level)                \
+		if (l && prio >= l->level)               \
 			tll_logger_printf(l, prio, fmt); \
 	} while (0)
 
