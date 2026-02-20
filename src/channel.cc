@@ -193,7 +193,7 @@ class WSSSE : public WSNode<WSSSE>
 		tll::util::OwnedMessage omsg = {};
 		tll_msg_copy_info(omsg, msg);
 		omsg.size = msg->size + 6 + 2;
-		char * buf = new char[omsg.size]; 
+		char * buf = new char[omsg.size];
 		omsg.data = buf;
 		memcpy(buf, "data: ", 6);
 		memcpy(buf + 6, msg->data, msg->size);
@@ -297,7 +297,7 @@ int WSServer::_open(const ConstConfig &s)
 #else
 	_ev_loop = ev_loop_new(EVFLAG_NOENV | EVFLAG_NOSIGMASK);
 	if (!_ev_loop)
-		return _log.fail(EINVAL, "Faield to ini libev event loop");
+		return _log.fail(EINVAL, "Failed to init libev event loop");
 
 	ev_io_init(&_ev_timer, poll_cb_ev, _timerfd, EV_READ);
 	ev_io_start(_ev_loop, &_ev_timer);
