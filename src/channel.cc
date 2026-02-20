@@ -271,8 +271,9 @@ void poll_cb_ev(struct ev_loop *, ev_io *ev, int)
 
 int WSServer::_open(const ConstConfig &s)
 {
+	int fd = -1;
 #ifdef __linux__
-	auto _timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	_timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (_timerfd == -1)
 		return _log.fail(EINVAL, "Failed to create timer fd: {}", strerror(errno));
 
@@ -284,7 +285,7 @@ int WSServer::_open(const ConstConfig &s)
 #if 0
 	if (uv_loop_init(&_uv_loop))
 		return _log.fail(EINVAL, "Failed to init libuv event loop");
-	auto fd = uv_backend_fd(&_uv_loop);
+	fd = uv_backend_fd(&_uv_loop);
 
 	uv_poll_init(&_uv_loop, &_uv_timer, _timerfd);
 	uv_poll_start(&_uv_timer, UV_READABLE, poll_cb_uv);
@@ -303,7 +304,7 @@ int WSServer::_open(const ConstConfig &s)
 
 	ev_run(_ev_loop, EVRUN_NOWAIT);
 
-	auto fd = tll_ev_backend_fd(_ev_loop);
+	fd = tll_ev_backend_fd(_ev_loop);
 
 	_loop_ptr[0] = _ev_loop;
 	_info.options |= LWS_SERVER_OPTION_LIBEV;
