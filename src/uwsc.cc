@@ -102,10 +102,10 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 	return Base<WSClient>::_init(url, master);
 }
 
-int WSClient::_open(const tll::ConstConfig &url)
+int WSClient::_open(const tll::ConstConfig &cfg)
 {
 	Headers headers = _headers;
-	if (auto hcfg = url.sub("header"); hcfg)
+	if (auto hcfg = cfg.sub("header"); hcfg)
 		_fill_headers(headers, *hcfg);
 	std::string hstring;
 	for (auto & [h, v] : headers)
@@ -115,7 +115,14 @@ int WSClient::_open(const tll::ConstConfig &url)
 	if (!_ev_loop)
 		return _log.fail(EINVAL, "Failed to init libev event loop");
 
-	_client = uwsc_new(_ev_loop, _url.c_str(), _ping_interval.count(), hstring.size() ? hstring.c_str() : nullptr);
+	std::string storage;
+	const char * curl = _url.c_str();
+	if (auto path = cfg.get("path"); path) {
+		storage = _url + std::string(*path);
+		curl = storage.c_str();
+	}
+
+	_client = uwsc_new(_ev_loop, curl, _ping_interval.count(), hstring.size() ? hstring.c_str() : nullptr);
 	if (!_client)
 		return _log.fail(EINVAL, "Failed to init uwsc client");
 

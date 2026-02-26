@@ -131,3 +131,24 @@ async def test_server_write_full(asyncloop, port):
     m = await sub.recv(0.001)
     assert (m.type, m.msgid) == (m.Type.Control, sub.scheme_control['WriteReady'].msgid)
     assert m.addr == addr
+
+@asyncloop_run
+async def test_open_path(asyncloop, port):
+    server = asyncloop.Channel(f'uws://*:{port}', name='server', sndbuf='16kb')
+    client = asyncloop.Channel(f'ws://127.0.0.1:{port}', name='client', dump='frame')
+    sub = asyncloop.Channel("uws+ws://path", master=server, name='server/path', dump='frame');
+
+    server.open()
+    sub.open()
+    client.open(path='/path')
+
+    m = await sub.recv()
+    assert (m.type, m.msgid) == (m.Type.Control, sub.scheme_control['Connect'].msgid)
+
+    client.close()
+
+    m = await sub.recv()
+    assert (m.type, m.msgid) == (m.Type.Control, sub.scheme_control['Disconnect'].msgid)
+
+    client.open()
+    assert (await client.recv_state()) == client.State.Error

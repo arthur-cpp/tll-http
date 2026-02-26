@@ -37,6 +37,9 @@ Open parameters
 ``header.**=<string>`` - same as init parameter (overrides if same header is
 specified) but only for one session.
 
+``path=<string>`` - path suffix, appended to ``ADDRESS`` as is, without checking for ``/`` character
+or escaping. Can be either path or query fragment.
+
 Config info
 ~~~~~~~~~~~
 
