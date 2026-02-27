@@ -151,7 +151,7 @@ template <> struct EVImpl<tll_ev_timer> { using Impl = EVTimer; };
 struct tll_ev_loop
 {
 	tll_channel_internal_t * internal = nullptr;
-	double now = 0;
+	std::chrono::time_point<std::chrono::system_clock, std::chrono::duration<double>> now;
 
 	std::list<std::unique_ptr<tll::Channel>> channels;
 	std::map<int, tll::Channel *> fdmap;
@@ -193,18 +193,17 @@ struct tll_ev_loop
 
 void tll_ev_now_update(tll_ev_loop * loop)
 {
-	using namespace std::chrono;
-	loop->now = time_point_cast<duration<double>>(tll::time::now_cached()).time_since_epoch().count();
+	loop->now = tll::time::now_cached();
 }
 
 tll_ev_tstamp tll_ev_now(tll_ev_loop * loop)
 {
-	return loop->now;
+	return loop->now.time_since_epoch().count();
 }
 
 tll_ev_loop * tll_ev_loop_new(tll_channel_internal_t * internal)
 {
-	return new tll_ev_loop { .internal = internal };
+	return new tll_ev_loop { .internal = internal, .now = tll::time::now() };
 }
 
 void tll_ev_loop_destroy(tll_ev_loop * loop)
