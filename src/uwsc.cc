@@ -122,6 +122,7 @@ int WSClient::_open(const tll::ConstConfig &cfg)
 		curl = storage.c_str();
 	}
 
+	_log.info("Connect to {}", curl);
 	_client = uwsc_new(_ev_loop, curl, _ping_interval.count(), hstring.size() ? hstring.c_str() : nullptr);
 	if (!_client)
 		return _log.fail(EINVAL, "Failed to init uwsc client");
