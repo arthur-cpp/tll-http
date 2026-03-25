@@ -147,8 +147,8 @@ def test_fail_open(context):
 @asyncloop_run
 async def test_http_wildcard(asyncloop, server, client):
     sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes');
-    wc = asyncloop.Channel("uws+http://pa*", master=server, name='server/wildcard', dump='yes');
-    other = asyncloop.Channel("uws+http://pb*", master=server, name='server/wildcard', dump='yes');
+    wc = asyncloop.Channel("uws+http://pa*", master=server, name='server/w0', dump='yes');
+    other = asyncloop.Channel("uws+http://pb*", master=server, name='server/w1', dump='yes');
 
     server.open()
     client.open()
