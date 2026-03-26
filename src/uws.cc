@@ -30,7 +30,7 @@ struct User {
 	std::variant<WSWS *, WSPub *> channel;
 	tll::util::DataRing<void>::iterator position; // For pub nodes
 	tll_addr_t addr;
-	std::string path;
+	std::vector<char> connect; // Body of connect message
 };
 
 using WebSocket = uWS::WebSocket<false, true, User>;
@@ -53,6 +53,7 @@ class WSServer : public tll::channel::Base<WSServer>
 	size_t _max_payload_size = 16 * 1024;
 	size_t _sndbuf = 0;
 	size_t _rcvbuf = 0;
+	std::vector<char> _connect_buf;
 
  public:
 	uWS::OpCode default_op_code = uWS::OpCode::BINARY;
@@ -134,6 +135,31 @@ class WSServer : public tll::channel::Base<WSServer>
 	void _ws_message(WebSocket *, std::string_view, uWS::OpCode);
 	void _ws_drain(WebSocket *);
 	void _ws_close(WebSocket *, int code, std::string_view message);
+
+	int _connect_fill(std::vector<char> &buf, uWS::HttpRequest *req, Method method = Method::UNDEFINED)
+	{
+		auto data = ws_scheme::Connect::bind(buf);
+		buf.resize(0);
+		buf.resize(data.meta_size());
+
+		data.set_path(req->getFullUrl());
+		data.set_method(method);
+
+		auto i = 0;
+		for (const auto &h : *req) {
+			(void) h;
+			i++;
+		}
+		data.get_headers().resize(i);
+		i = 0;
+		for (const auto &h : *req) {
+			auto into = data.get_headers()[i++];
+			into.set_header(h.first);
+			into.set_value(h.second);
+		}
+
+		return 0;
+	}
 };
 
 thread_local WSServer * WSServer::_instance = nullptr;
@@ -199,7 +225,7 @@ class WSNode : public tll::channel::Base<T>
 		return 0;
 	}
 
-	int _connected(R * resp, std::string_view url, tll_addr_t * addr, Method method = Method::UNDEFINED);
+	int _connected(R * resp, const std::vector<char> &buf, tll_addr_t * addr);
 	int _disconnected(R * resp, tll_addr_t addr);
 
 	void writeable(R * ws, User * user) {}
@@ -399,12 +425,12 @@ class WSPub : public WSNode<WSPub, WebSocket>
 		return Parent::_post(msg, flags);
 	}
 
-	int _connected(Response * ws, std::string_view url, tll_addr_t * addr)
+	int _connected(Response * ws, const std::vector<char> &buf, tll_addr_t * addr)
 	{
 		auto user = ws->getUserData();
 		user->position = _ring.end();
 
-		return Parent::_connected(ws, url, addr);
+		return Parent::_connected(ws, buf, addr);
 	}
 
 	void writeable(Response * ws, User * user)
@@ -589,21 +615,14 @@ int WSNode<T, R>::_close()
 }
 
 template <typename T, typename R>
-int WSNode<T, R>::_connected(R * resp, std::string_view uri, tll_addr_t * addr, Method method)
+int WSNode<T, R>::_connected(R * resp, const std::vector<char> &buf, tll_addr_t * addr)
 {
-	std::vector<unsigned char> buf;
-	auto data = ws_scheme::Connect::bind(buf);
-	buf.resize(data.meta_size());
-
-	data.set_path(uri);
-	data.set_method(method);
-
 	*addr = _next_addr();
 	_sessions.insert(std::make_pair(addr->u64, Session { .ptr = resp }));
 
 	tll_msg_t msg = {};
 	msg.type = TLL_MESSAGE_CONTROL;
-	msg.msgid = data.meta_id();
+	msg.msgid = ws_scheme::Connect::meta_id();
 	msg.addr = *addr;
 	msg.data = buf.data();
 	msg.size = buf.size();
@@ -671,7 +690,8 @@ void WSServer::_http(uWS::HttpResponse<false> * resp, uWS::HttpRequest *req)
 
 	auto channel = std::get<WSHTTP *>(*node);
 	tll_addr_t addr = {};
-	channel->_connected(resp, req->getFullUrl(), &addr, M);
+	_connect_fill(_connect_buf, req, M);
+	channel->_connected(resp, _connect_buf, &addr);
 
 	auto h = req->getHeader("content-length");
 	if (h.size()) {
@@ -721,7 +741,10 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 		channel = std::get<WSPub *>(*node);
 	}
 
-	resp->template upgrade<User>({ .channel = channel, .path = std::string(req->getFullUrl()) }
+	std::vector<char> buf;
+	_connect_fill(buf, req);
+
+	resp->template upgrade<User>({ .channel = channel, .connect = std::move(buf) }
 		, req->getHeader("sec-websocket-key")
 		, req->getHeader("sec-websocket-protocol")
 		, req->getHeader("sec-websocket-extensions")
@@ -732,7 +755,7 @@ void WSServer::_ws_upgrade(uWS::HttpResponse<false> * resp, uWS::HttpRequest *re
 void WSServer::_ws_open(WebSocket *ws)
 {
 	auto user = ws->getUserData();
-	std::visit([&ws, &user](auto && c) { c->_connected(ws, user->path, &user->addr); }, user->channel);
+	std::visit([&ws, &user](auto && c) { c->_connected(ws, user->connect, &user->addr); }, user->channel);
 }
 
 void WSServer::_ws_message(WebSocket *ws, std::string_view message, uWS::OpCode)

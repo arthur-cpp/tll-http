@@ -227,6 +227,24 @@ async def test_server_headers(asyncloop, server, client, mode):
     assert m.data.tobytes() == b'xxx'
 
 @asyncloop_run
+async def test_client_headers(asyncloop, server, client):
+    headers = {'X-A': 'A', 'X-B': 'B'}
+    headers = [{'header': k, 'value': v} for k,v in sorted(headers.items())]
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes')
+
+    server.open()
+    client.open()
+    sub.open()
+
+    client.post({'path':'/path', 'headers': headers}, type=client.Type.Control, name='Connect', addr=1)
+    m = await sub.recv()
+
+    assert m.type == m.Type.Control
+    m = sub.unpack(m)
+    assert m.path == '/path'
+    assert {h.header: h.value for h in m.headers if h.header.startswith('x-')} == {'x-a': 'A', 'x-b': 'B'}
+
+@asyncloop_run
 async def test_post_more(asyncloop, server, client):
     sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes')
 
