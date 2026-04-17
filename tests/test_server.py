@@ -120,8 +120,9 @@ async def test_http_data(asyncloop, server, port):
     await check_response(client, 3, {'code':200}, b'hello')
 
 @asyncloop_run
-@pytest.mark.parametrize("send,recv", [('UNDEFINED', 'POST'), ('POST', 'POST'), ('GET', 'GET')])
-async def test_http_method(asyncloop, server, port, send, recv):
+@pytest.mark.parametrize("method", [('UNDEFINED', 'POST'), 'POST', 'GET', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH'])
+async def test_http_method(asyncloop, server, port, method):
+    send, recv = method if isinstance(method, tuple) else (method, method)
     client = asyncloop.Channel(f'curl+http://127.0.0.1:{port}/path', transfer='control', name='client', dump='yes', method='POST')
 
     sub = asyncloop.Channel("uws+http://path", master=server, name='server/http', dump='yes');

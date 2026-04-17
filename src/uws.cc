@@ -521,6 +521,8 @@ int WSServer::_open(const ConstConfig &s)
 		.put("/*", [this](auto *res, auto *req) { this->_http<Method::PUT>(res, req); })
 		.head("/*", [this](auto *res, auto *req) { this->_http<Method::HEAD>(res, req); })
 		.options("/*", [this](auto *res, auto *req) { this->_http<Method::OPTIONS>(res, req); })
+		.del("/*", [this](auto *res, auto *req) { this->_http<Method::DELETE>(res, req); })
+		.patch("/*", [this](auto *res, auto *req) { this->_http<Method::PATCH>(res, req); })
 		.ws<User>("/*", std::move(wsopt))
 		.listen(_port, [this](auto *token) {
 			this->_app_socket = token;
