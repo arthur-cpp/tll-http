@@ -95,7 +95,7 @@ class ChCURLSocket : public tll::channel::Base<ChCURLSocket>
 
 	int _process(long timeout, int flags)
 	{
-		_log.debug("Run curl socket action");
+		_log.trace("Run curl socket action");
 		_master->multi_action(fd());
 		return EAGAIN;
 	}
@@ -146,7 +146,7 @@ int ChCURLMulti::_init(const tll::Channel::Url &url, tll::Channel *master)
 
 	if (auto r = curl_global_init(CURL_GLOBAL_DEFAULT); r)
 		return _log.fail(EINVAL, "curl_global_init failed: {}", curl_easy_strerror(r));
-	
+
 	return 0;
 }
 
@@ -210,7 +210,7 @@ void ChCURLMulti::_free()
 
 int ChCURLMulti::_process(long timeout, int flags)
 {
-	_log.debug("Check for curl info messages");
+	_log.trace("Check for curl info messages");
 	unsigned empty = 0;
 	for (auto i = _sockets.begin(); i != _sockets.end(); ) {
 		if ((*i)->fd() == -1 && ++empty > 5) {
@@ -326,7 +326,7 @@ static constexpr std::string_view method_str(http_scheme::Method m)
 
 int ChCURLMulti::_curl_socket_cb(CURL *e, curl_socket_t fd, int what, ChCURLSocket *c)
 {
-	_log.debug("Curl socket callback {}", what2str(what));
+	_log.trace("Curl socket callback {}", what2str(what));
 	if (what == CURL_POLL_REMOVE) {
 		if (!c) return 0;
 		c->bind(-1);
@@ -754,12 +754,12 @@ size_t curl_session_t::header(char * cdata, size_t size)
 
 size_t curl_session_t::read(char * data, size_t size)
 {
-	parent->_log.debug("Requested {} bytes of data", size);
+	parent->_log.trace("Requested {} bytes of data", size);
 	if (roff == rbuf.size())
 		return 0; //CURL_READFUNC_PAUSE;
 
 	auto s = std::min(rbuf.size() - roff, size);
-	parent->_log.debug("Send {} bytes of data (requested {})", s, size);
+	parent->_log.trace("Got {} bytes of data (requested {})", s, size);
 	memcpy(data, rbuf.data() + roff, s);
 	roff += s;
 	return s;
@@ -776,7 +776,7 @@ void curl_session_t::connected()
 		parent->_log.debug("Content-Size is not supported for this protocol");
 
 	std::string_view url = tll::curl::getinfo<CURLINFO_EFFECTIVE_URL>(curl).value_or("");
-	parent->_log.info("Send connect message for {}", url);
+	parent->_log.info("Connected to '{}'", url);
 
 	std::vector<unsigned char> buf;
 	auto data = http_scheme::Connect::bind(buf);
@@ -892,7 +892,7 @@ void curl_session_t::reset()
 
 	if (headers_list)
 		curl_slist_free_all(headers_list);
-	
+
 	headers_list = nullptr;
 
 	if (url)
