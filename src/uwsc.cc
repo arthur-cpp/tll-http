@@ -85,7 +85,7 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 	auto reader = channel_props_reader(url);
 	_ping_interval = reader.getT("ping", 3s);
 	_report_ping = reader.getT("report-ping", false);
-	auto ca = reader.getT<std::optional<std::string>>("ca", std::nullopt);
+	auto ca = reader.getT("ca", std::string { "default" });
 	_ws_op = reader.getT("binary", true) ? UWSC_OP_BINARY : UWSC_OP_TEXT;
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
@@ -96,8 +96,10 @@ int WSClient::_init(const tll::Channel::Url &url, tll::Channel *master)
 	_url = fmt::format("{}://{}", url.proto(), url.host());
 
 	uwsc_logger_ref();
-	if (ca)
-		uwsc_load_ca_crt_file(ca->c_str());
+	if (ca == "default")
+		uwsc_load_ca_crt_file(nullptr);
+	else
+		uwsc_load_ca_crt_file(ca.c_str());
 
 	return Base<WSClient>::_init(url, master);
 }
