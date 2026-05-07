@@ -1,3 +1,28 @@
+tll-http (0.4.0) unstable; urgency=medium
+
+  * curl: Do not use anonymous namespace in the header
+  * libuwsc:
+    Build with new ssl dependency
+    Set SNI SSL extension
+    Faster nonce generation
+  * tests: Fix duplicate channel names
+  * tll-ev: Map libev to tll channel objects
+  * uws:
+    Add DELETE and PATCH methods
+    Add sndbuf/rcvbuf settings for testing
+    Report write full/ready status
+    Fill Connect message for websockets and HTTP
+    Per channel list of extra HTTP headers
+    Support POST_MORE flag for HTTP sessions
+  * uwsc:
+    Load default CA when compiled with openssl
+    Fix incorrect log level filtering
+    Fix timerfd leak
+    Pass URL suffix in open
+    Use tll libev emulation
+
+ -- Pavel Shramov <shramov@mexmat.net>  Thu, 07 May 2026 09:39:14 +0300
+
 tll-http (0.3.0) unstable; urgency=medium
 
   * doc: Describe prefix paths for uws
