@@ -22,7 +22,7 @@ def context():
 
 @pytest.fixture
 def server(asyncloop, port):
-    c = asyncloop.Channel(f'uws://*:{port}', name='server')
+    c = asyncloop.Channel(f'uws://127.0.0.1:{port}', name='server')
     yield c
     c.close()
 
@@ -272,3 +272,28 @@ async def test_post_more(asyncloop, server, client):
 
     m = await client.recv()
     assert m.data.tobytes() == b'xxxyyy'
+
+@asyncloop_run
+async def test_bind(asyncloop, server, port):
+    sub = asyncloop.Channel("uws+http://path", master=server, name='server/path', dump='yes')
+
+    server.open()
+    sub.open()
+
+    client = asyncloop.Channel(f'curl+http://127.0.0.1:{port}/path', name='client', dump='frame')
+    client.open()
+
+    m = await sub.recv()
+
+    assert m.type == m.Type.Control
+    assert sub.unpack(m).path == '/path'
+
+    client.free()
+
+    client = asyncloop.Channel(f'curl+http://127.0.1.1:{port}/path', name='client', dump='frame')
+    client.open()
+
+    m = await client.recv(0.1)
+
+    assert m.type == m.Type.Control
+    assert client.unpack(m).SCHEME.name == 'Disconnect'

@@ -470,6 +470,8 @@ int WSServer::_init(const Channel::Url &url, Channel * master)
 
 	_port = *p;
 	_host = host.substr(0, sep);
+	if (_host == "*")
+		_host = "";
 
 	auto reader = channel_props_reader(url);
 	default_op_code = reader.getT("binary", true) ? uWS::OpCode::BINARY : uWS::OpCode::TEXT;
@@ -524,7 +526,7 @@ int WSServer::_open(const ConstConfig &s)
 		.del("/*", [this](auto *res, auto *req) { this->_http<Method::DELETE>(res, req); })
 		.patch("/*", [this](auto *res, auto *req) { this->_http<Method::PATCH>(res, req); })
 		.ws<User>("/*", std::move(wsopt))
-		.listen(_port, [this](auto *token) {
+		.listen(_host, _port, [this](auto *token) {
 			this->_app_socket = token;
 			if (token) {
 				this->_log.info("Serving");
