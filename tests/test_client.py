@@ -9,14 +9,14 @@ from tll import asynctll
 from tll.channel import Context
 from tll.test_util import ports
 
-@pytest.fixture
-def context():
+@pytest.fixture(params=['uwsc', 'wslay'])
+def context(request) -> Context:
     ctx = Context()
     try:
         ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uws"))
-        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), "tll-uwsc"))
+        ctx.load(os.path.join(os.environ.get("BUILD_DIR", "build"), f"tll-{request.param}"))
     except:
-        pytest.skip("uws:// or ws:// channels not available")
+        pytest.skip(f"uws:// or {request.param} channels not available")
     return ctx
 
 @pytest.fixture

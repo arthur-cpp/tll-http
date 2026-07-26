@@ -14,6 +14,7 @@ tll = dependency('tll')
 fmt = dependency('fmt')
 curl = dependency('libcurl') #, version: '>=7.63', required: false, disabler: true)
 libuv = dependency('libuv')
+wslay = dependency('wslay')
 
 lws = dependency('libwebsockets', required: get_option('with_lws'), disabler: true)
 libev = meson.get_compiler('c').find_library('ev', required: get_option('with_lws'), disabler: true)
@@ -42,6 +43,13 @@ uwsc = shared_library('tll-uwsc',
 		['src/uwsc.cc', 'src/ev-backend.c'],
 		include_directories : include,
 		dependencies : [fmt, tll, libuwsc, libev_tll],
+		install : true
+)
+
+shared_library('tll-wslay',
+		['src/wslay.cc'],
+		include_directories : include,
+		dependencies : [fmt, tll, wslay],
 		install : true
 )
 
