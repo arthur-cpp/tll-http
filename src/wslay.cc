@@ -25,13 +25,14 @@ class WSLay : public tll::channel::Prefix<WSLay>
 	struct wslay_event_context * _client = nullptr;
 
 	std::string _host, _path, _path_suffix;
-	std::chrono::seconds _ping_interval = 3s;
+	tll::duration _ping_interval = 3s;
 	std::chrono::time_point<std::chrono::steady_clock> _ping_ts = {};
 	bool _report_ping = false;
 
 	using Headers = std::map<std::string, std::string>;
 	Headers _headers;
 	std::string_view _buf;
+	std::unique_ptr<tll::Channel> _timer;
 
 public:
 	static constexpr std::string_view channel_protocol() { return "wslay+"; }
@@ -47,6 +48,13 @@ public:
 
 	int _post(const tll_msg_t *msg, int flags);
 	int _process(long timeout, int flags);
+
+	const tll::Scheme * scheme(int type) const
+	{
+		if (type == TLL_MESSAGE_CONTROL)
+			return _scheme_control.get();
+		return Base::scheme(type);
+	}
 
 	int _on_init(tll::Channel::Url &curl, const tll::Channel::Url &, const tll::Channel *)
 	{
@@ -65,6 +73,16 @@ private:
 	int _ping();
 
 	int _on_recv_buf(std::string_view);
+	int _on_timer(const tll::Channel *, const tll_msg_t *)
+	{
+		_ping_ts = std::chrono::steady_clock::now();
+		wslay_event_msg frame = { .opcode = WSLAY_PING };
+		if (auto r = wslay_event_queue_msg(_client, &frame); r)
+			return _log.fail(EINVAL, "Failed to queue ping message: {}", r);
+		if (auto r = wslay_event_send(_client); r)
+			return state_fail(EINVAL, "wslay_event_send failed: {}", r);
+		return 0;
+	}
 
 	ssize_t _on_recv(wslay_event_context * ctx, uint8_t *buf, size_t len, int flags);
 	ssize_t _on_send(wslay_event_context * ctx, const uint8_t *buf, size_t len, int flags);
@@ -88,11 +106,23 @@ using namespace tll;
 int WSLay::_init(const tll::Channel::Url &url, tll::Channel *master)
 {
 	auto reader = channel_props_reader(url);
-	_ping_interval = reader.getT("ping", 3s);
+	_ping_interval = reader.getT<tll::duration>("ping", 3s);
 	_report_ping = reader.getT("report-ping", false);
 	_ws_op = reader.getT("binary", true) ? WSLAY_BINARY_FRAME : WSLAY_TEXT_FRAME;
 	if (!reader)
 		return _log.fail(EINVAL, "Invalid url: {}", reader.error());
+
+	if (_ping_interval.count() > 0) {
+		auto turl = child_url_parse("timer://", "timer");
+		if (!turl)
+			return _log.fail(EINVAL, "Failed to parse timer url: {}", turl.error());
+		turl->set("interval", tll::conv::to_string(_ping_interval));
+		_timer = context().channel(*turl);
+		if (!_timer)
+			return _log.fail(EINVAL, "Failed to init timer channel");
+		_timer->callback_add<WSLay, &WSLay::_on_timer>(this, TLL_MESSAGE_MASK_DATA);
+		_child_add(_timer.get(), "timer");
+	}
 
 	if (auto hcfg = url.sub("header"); hcfg)
 		_fill_headers(_headers, *hcfg);
@@ -150,6 +180,8 @@ int WSLay::_close(bool force)
 	if (_client)
 		wslay_event_context_free(_client);
 	_client = nullptr;
+	if (_timer)
+		_timer->close();
 
 	return 0;
 }
@@ -183,12 +215,16 @@ int WSLay::_process(long timeout, int flags)
 void WSLay::_on_ws_error(int err, const char * msg)
 {
 	_log.error("Error occurred: {}", msg);
+	if (_timer)
+		_timer->close();
 	state(tll::state::Error);
 }
 
 void WSLay::_on_ws_close(int code, std::string_view reason)
 {
 	_log.info("Connection closed: {} {}", code, reason);
+	if (_timer)
+		_timer->close();
 	wslay_event_send(_client); // Send close frame to the server
 	state(tll::state::Closing);
 	_update_dcaps(dcaps::Process | dcaps::Pending);
@@ -310,6 +346,8 @@ int WSLay::_handshake(const tll_msg_t * msg)
 	if (reply.substr(0, expect.size()) != expect)
 		return state_fail(EINVAL, "Invalid reply: {}", reply);
 	_log.info("Connection established");
+	if (_timer)
+		_timer->open();
 	state(tll::state::Active);
 	return _on_recv_buf(data.substr(sep + 4));
 }

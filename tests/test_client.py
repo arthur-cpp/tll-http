@@ -152,3 +152,21 @@ async def test_open_path(asyncloop, port):
 
     client.open()
     assert (await client.recv_state()) == client.State.Error
+
+@asyncloop_run
+async def test_ping_interval(asyncloop, port):
+    if not asyncloop.context.has_impl("wslay+"):
+        pytest.skip("uwsc ping interval is too large")
+    server = asyncloop.Channel(f'uws://*:{port}', name='server')
+    client = asyncloop.Channel(f'ws://127.0.0.1:{port}/path;report-ping=yes;ping=1ms', name='client', dump='yes')
+    sub = asyncloop.Channel("uws+ws://path", master=server, name='server/path', dump='frame');
+
+    server.open()
+    sub.open()
+    client.open()
+
+    m = await sub.recv()
+    assert (m.type, m.msgid) == (m.Type.Control, sub.scheme_control['Connect'].msgid)
+
+    m = await client.recv(0.1)
+    assert (m.type, m.msgid) == (m.Type.Control, client.scheme_control['Pong'].msgid)
