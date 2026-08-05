@@ -266,7 +266,16 @@ int WSLay::_on_active()
 	std::string key = "AAAAAAAAAAAAAAAAAAAAAA==";
 	std::string keyresp = "mMUdnrWkqg9evVAwThfwMU3nxG0=";
 
-	auto buf = fmt::memory_buffer();
+#if FMT_VERSION < 80000
+	struct memory_buffer : public fmt::memory_buffer
+	{
+		void append(const std::string_view &v) { fmt::memory_buffer::append(v.data(), v.data() + v.size()); }
+	};
+#else
+	using fmt::memory_buffer;
+#endif
+
+	auto buf = memory_buffer();
 	buf.append(std::string_view("GET "));
 	if (_path.empty() && _path_suffix.empty()) {
 		buf.append("/"sv);
