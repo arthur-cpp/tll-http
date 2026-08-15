@@ -74,6 +74,14 @@ async def test(asyncloop, server, client, port):
     m = sub.unpack(m)
     assert m.SCHEME.name == 'Connect'
     assert m.path == '/path'
+    headers = {h.header: h.value for h in m.headers if h.header}
+    assert {k: v for k, v in headers.items() if k not in ('host', 'sec-websocket-key')} == {
+            'connection': 'Upgrade',
+            'sec-websocket-version': '13',
+            'upgrade': 'websocket',
+            'x-a': 'Aa',
+            'x-b': 'b',
+            }
 
     client.post(b'xxx')
     client.post(b'yyy')

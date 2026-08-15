@@ -23,6 +23,7 @@ class WSLay : public tll::channel::Prefix<WSLay>
 	uint8_t _ws_op = WSLAY_BINARY_FRAME;
 
 	struct wslay_event_context * _client = nullptr;
+	std::string_view _buf;
 
 	std::string _host, _path, _path_suffix;
 	tll::duration _ping_interval = 3s;
@@ -31,9 +32,9 @@ class WSLay : public tll::channel::Prefix<WSLay>
 
 	using Headers = std::map<std::string, std::string>;
 	Headers _headers;
-	std::string_view _buf;
-	std::unique_ptr<tll::Channel> _timer;
+	std::string _headers_str;
 
+	std::unique_ptr<tll::Channel> _timer;
 public:
 	static constexpr std::string_view channel_protocol() { return "wslay+"; }
 	static constexpr auto child_policy() { return ChildPolicy::Many; }
@@ -141,9 +142,9 @@ int WSLay::_open(const tll::ConstConfig &cfg)
 	Headers headers = _headers;
 	if (auto hcfg = cfg.sub("header"); hcfg)
 		_fill_headers(headers, *hcfg);
-	std::string hstring;
+	_headers_str.clear();
 	for (auto & [h, v] : headers)
-		hstring += fmt::format("{}: {}\r\n", h, v);
+		_headers_str += fmt::format("{}: {}\r\n", h, v);
 
 	wslay_event_callbacks callbacks = {
 	    .recv_callback = [](wslay_event_context_ptr ctx, uint8_t *buf, size_t len, int flags,
@@ -325,9 +326,11 @@ int WSLay::_on_active()
 		"Upgrade: websocket\r\n"
 		"Connection: Upgrade\r\n"
 		"Sec-WebSocket-Key: {}\r\n"
-		"Sec-WebSocket-Version: 13\r\n"
-		"\r\n",
+		"Sec-WebSocket-Version: 13\r\n",
 		_host, key);
+	if (_headers_str.size())
+		buf.append(_headers_str);
+	buf.append("\r\n"sv);
 	tll_msg_t msg = { .type = TLL_MESSAGE_DATA, .data = buf.data(), .size = buf.size() };
 	if (auto r = _child->post(&msg); r)
 		return _log.fail(EINVAL, "Failed to post initial handshake");
