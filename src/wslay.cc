@@ -25,7 +25,7 @@ class WSLay : public tll::channel::Prefix<WSLay>
 	struct wslay_event_context * _client = nullptr;
 	std::string_view _buf;
 
-	std::string _host, _path, _path_suffix;
+	std::string _host, _path, _path_suffix, _hostname;
 	tll::duration _ping_interval = 3s;
 	std::chrono::time_point<std::chrono::steady_clock> _ping_ts = {};
 	bool _report_ping = false;
@@ -107,6 +107,7 @@ using namespace tll;
 int WSLay::_init(const tll::Channel::Url &url, tll::Channel *master)
 {
 	auto reader = channel_props_reader(url);
+	_hostname = reader.getT("hostname", std::string{});
 	_ping_interval = reader.getT<tll::duration>("ping", 3s);
 	_report_ping = reader.getT("report-ping", false);
 	_ws_op = reader.getT("binary", true) ? WSLAY_BINARY_FRAME : WSLAY_TEXT_FRAME;
@@ -321,13 +322,14 @@ int WSLay::_on_active()
 		buf.append(_path_suffix);
 	}
 	buf.append(" HTTP/1.1\r\n"sv);
+	std::string_view host = _hostname.size() ? _hostname : _host;
 	fmt::format_to(std::back_inserter(buf),
 		"Host: {}\r\n"
 		"Upgrade: websocket\r\n"
 		"Connection: Upgrade\r\n"
 		"Sec-WebSocket-Key: {}\r\n"
 		"Sec-WebSocket-Version: 13\r\n",
-		_host, key);
+		host, key);
 	if (_headers_str.size())
 		buf.append(_headers_str);
 	buf.append("\r\n"sv);
